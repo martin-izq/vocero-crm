@@ -66,11 +66,12 @@ export function presetDeBaseUrl(baseUrl: string): AiProviderId {
  * pero media internet publica la suya CON él (`https://api.groq.com/openai/v1`).
  * Se aceptan las dos: si ya termina en `/v1` no se duplica. Con la antigua
  * concatenación a ciegas, pegar la segunda daba `/v1/v1/chat/completions` y
- * un 404 que no explicaba nada.
+ * un 404 que no explicaba nada. Tampoco se toca una raíz ya versionada con
+ * otro nombre, como la de Gemini (`/v1beta/openai`).
  */
 export function apiRoot(baseUrl: string): string {
   const sinBarra = baseUrl.trim().replace(/\/+$/, "");
-  return /\/v1$/i.test(sinBarra) ? sinBarra : `${sinBarra}/v1`;
+  return /\/v\d+[a-z0-9]*(\/openai)?$/i.test(sinBarra) ? sinBarra : `${sinBarra}/v1`;
 }
 
 export function chatCompletionsUrl(baseUrl: string): string {

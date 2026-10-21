@@ -59,6 +59,9 @@ describe("URLs del proveedor", () => {
       "http://localhost:3000/api/dev/ai-mock/v1/chat/completions"
     );
     expect(modelsUrl("https://api.openai.com")).toBe("https://api.openai.com/v1/models");
+    expect(chatCompletionsUrl("https://generativelanguage.googleapis.com/v1beta/openai/")).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    );
   });
 
   it("reconoce el preset por la base URL", () => {
