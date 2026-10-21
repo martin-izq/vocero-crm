@@ -149,6 +149,12 @@ try {
   ok(altaP.status === 201, `POST /api/bot/turnos → ${altaP.status}`);
   const turnoP = altaP.body?.turno;
   ok(turnoP?.peopleBefore === 2, `tiene 2 personas antes (${turnoP?.peopleBefore})`);
+  // Q se suma detrás de P: su «ya casi» llega cuando le quede uno adelante.
+  const Q = tel(2);
+  await escribe(Q, "Quique Paciente", "turno para hoy");
+  const convQ = await conversacionDe(Q);
+  const altaQ = await bot("POST", "/api/bot/turnos", { conversationId: convQ, agendaId: agenda.id });
+  ok(altaQ.status === 201 && altaQ.body?.turno?.peopleBefore === 3, `Q saca turno ${altaQ.body?.turno?.code} con 3 antes`);
   const otra = await bot("POST", "/api/bot/turnos", { conversationId: convP, agendaId: agenda.id });
   ok(otra.status === 409 && otra.body?.error?.code === "ya_tiene_turno", "un segundo turno el mismo día → 409 ya_tiene_turno");
   const sinFila = await bot("POST", "/api/bot/turnos", { conversationId: convP, agendaId: "qa_noexiste" });
@@ -231,11 +237,6 @@ try {
 
   // ---------------------------------------------------------------------
   paso("otro paciente responde «No voy a poder»");
-  const Q = tel(2);
-  await escribe(Q, "Quique Paciente", "turno para hoy");
-  const convQ = await conversacionDe(Q);
-  const altaQ = await bot("POST", "/api/bot/turnos", { conversationId: convQ, agendaId: agenda.id });
-  ok(altaQ.status === 201, `Q saca turno ${altaQ.body?.turno?.code}`);
   const prontoQ = await hasta(async () => (await salientes(Q)).find((m) => m.body?.type === "interactive"));
   ok(Boolean(prontoQ), "a Q le llega «ya casi»");
   const botonNo = prontoQ?.body?.interactive?.action?.buttons?.[1]?.reply?.id;
@@ -260,6 +261,15 @@ try {
   ok(ajeno.status === 404, "el turno de otro contacto → 404");
 
   // ---------------------------------------------------------------------
+  paso("quien se suma ya cerca no recibe «ya casi» encima de la respuesta");
+  const N = tel(4);
+  await escribe(N, "Nico Cerca", "turno ya");
+  const convN = await conversacionDe(N);
+  const altaN = await bot("POST", "/api/bot/turnos", { conversationId: convN, agendaId: agenda.id });
+  ok(altaN.status === 201 && altaN.body?.turno?.peopleBefore <= AGENDA.notifyBefore, `N entra con ${altaN.body?.turno?.peopleBefore} antes`);
+  await esperar(2500);
+  ok(!(await salientes(N)).some((m) => m.body?.type === "interactive"), "no le llega «¿Estás viniendo?» al sumarse");
+
   paso("una cita de hoy entra a la fila y avisa la demora");
   const hoy = (await tablero()) && (await api("GET", "/api/turnos/board")).body.day;
   const libres = (await api("GET", `/api/calendar/availability?from=${hoy}&to=${hoy}`)).body?.slots ?? [];

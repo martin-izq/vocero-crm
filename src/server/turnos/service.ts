@@ -355,9 +355,19 @@ export async function sumarTurno(input: {
         actor: input.actor,
         userId: input.userId ?? null,
       });
-      despuesDelCambio(input.organizationId, agenda.id);
       const dia = armarDia(agenda, [...turns, turn!], now);
       const est = dia.estimate.turns.get(id);
+      // Si ya entra dentro del «ya casi», ese aviso cuenta como dicho: quien
+      // lo sumó (el agente o recepción) le acaba de dar estos mismos números,
+      // y un «¿Estás viniendo?» en el mismo instante llegaba antes que esa
+      // respuesta.
+      if (est && est.peopleBefore <= agenda.notifyBefore) {
+        await db
+          .insert(schema.turnNotice)
+          .values({ id: newId("turnNotice"), organizationId: input.organizationId, turnId: id, kind: "pronto", status: "sent", error: "al_sumarse" })
+          .onConflictDoNothing();
+      }
+      despuesDelCambio(input.organizationId, agenda.id);
       return {
         ok: true,
         turn: turn!,
