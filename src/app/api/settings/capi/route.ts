@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withAuth, withConfigAuth } from "@/lib/api";
 import {
   atribucionDisabledResponse,
   atribucionEnabled,
@@ -39,7 +39,7 @@ const putSchema = z.object({
   qualifiedStageId: z.string().trim().min(1).nullish(),
 });
 
-export const PUT = withAuth(async (session, req: Request) => {
+export const PUT = withConfigAuth(async (session, req: Request) => {
   if (!atribucionEnabled()) return atribucionDisabledResponse();
 
   const body = await parseBody(req, putSchema);
@@ -79,7 +79,7 @@ export const PUT = withAuth(async (session, req: Request) => {
   return Response.json({ ok: true });
 });
 
-export const DELETE = withAuth(async (session) => {
+export const DELETE = withConfigAuth(async (session) => {
   if (!atribucionEnabled()) return atribucionDisabledResponse();
   await deleteCapiSettings(session.organizationId);
   return Response.json({ ok: true });

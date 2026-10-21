@@ -258,3 +258,12 @@ describe("el respaldo del entorno", () => {
     });
   });
 });
+
+describe("la llave guardada no viaja a otra raíz", () => {
+  it("misma raíz con o sin /v1 y barra final; otra raíz no", async () => {
+    const { mismaRaiz } = await import("@/server/ai/settings");
+    expect(mismaRaiz("https://openrouter.ai/api", "https://openrouter.ai/api/v1/")).toBe(true);
+    expect(mismaRaiz("https://openrouter.ai/api", "https://evil.example/api")).toBe(false);
+    expect(mismaRaiz("https://api.x.com", "https://api.x.com.evil.example")).toBe(false);
+  });
+});

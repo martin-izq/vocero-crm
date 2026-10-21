@@ -1,4 +1,4 @@
-import { apiError, parseBody, withAuth } from "@/lib/api";
+import { apiError, parseBody, withAuth, withConfigAuth } from "@/lib/api";
 import { listModels } from "@/lib/ai/probe";
 import {
   aiModelsSchema,
@@ -13,11 +13,12 @@ export const dynamic = "force-dynamic";
  * guardada). Un proveedor que no publica la lista no es un error: se dice
  * (`soportado: false`) y el modelo se escribe a mano.
  */
-export const POST = withAuth(async (session, req: Request) => {
+export const POST = withConfigAuth(async (session, req: Request) => {
   const body = await parseBody(req, aiModelsSchema);
   if (!body.ok) return body.response;
 
-  const llave = await llaveParaProbar(session.organizationId, body.data.token);
+  const baseUrl = baseUrlEfectiva(body.data.provider, body.data.baseUrl);
+  const llave = await llaveParaProbar(session.organizationId, body.data.token, baseUrl);
   if (!llave) {
     return apiError(
       422,
@@ -25,8 +26,6 @@ export const POST = withAuth(async (session, req: Request) => {
       "Pega la llave del proveedor para traer sus modelos"
     );
   }
-
-  const baseUrl = baseUrlEfectiva(body.data.provider, body.data.baseUrl);
   const result = await listModels({ baseUrl, token: llave.token });
   if (result.ok) {
     return Response.json({ soportado: true, modelos: result.modelos });

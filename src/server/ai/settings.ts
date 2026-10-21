@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   AI_PROVIDERS,
   AI_PROVIDER_PRESETS,
+  apiRoot,
   last4,
   type AiProviderId,
 } from "@/lib/ai/presets";
@@ -101,14 +102,24 @@ export function baseUrlEfectiva(
 /**
  * La llave con la que probar o listar: la escrita, o la guardada. `null` si
  * no hay ninguna de las dos.
+ *
+ * La guardada solo viaja a la MISMA raíz de API donde se guardó: si no, un
+ * «Probar conexión» con otra base URL y sin llave le mandaba la llave de la
+ * organización como Bearer a cualquier servidor.
  */
 export async function llaveParaProbar(
   organizationId: string,
-  escrita: string | undefined
+  escrita: string | undefined,
+  baseUrl: string
 ): Promise<{ token: string; guardada: boolean } | null> {
   if (escrita) return { token: escrita, guardada: false };
   const cred = await getAiCredentialSecret(organizationId);
-  return cred ? { token: cred.token, guardada: true } : null;
+  if (!cred || !mismaRaiz(cred.baseUrl, baseUrl)) return null;
+  return { token: cred.token, guardada: true };
+}
+
+export function mismaRaiz(a: string, b: string): boolean {
+  return apiRoot(a).toLowerCase() === apiRoot(b).toLowerCase();
 }
 
 export type AiSettingsView = {
