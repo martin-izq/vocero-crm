@@ -107,6 +107,8 @@ const AGENDA = {
 // los minutos por persona y la demora es predecible.
 const CITAS = { ...AGENDA, name: "E2E Citas", room: "Box 8", numberPrefix: "Y", receivesBookings: true };
 const lista = await api("GET", "/api/turnos/agendas");
+// Para dejarlo como estaba: qué agenda recibía las citas.
+const recibiaCitas = lista.body?.agendas?.find((a) => a.receivesBookings && a.numberPrefix !== "Y");
 ok(lista.status === 200, `GET /api/turnos/agendas → ${lista.status}`);
 let agenda = lista.body.agendas.find((a) => a.numberPrefix === "Z");
 const guardada = agenda
@@ -149,6 +151,12 @@ try {
   ok(altaP.status === 201, `POST /api/bot/turnos → ${altaP.status}`);
   const turnoP = altaP.body?.turno;
   ok(turnoP?.peopleBefore === 2, `tiene 2 personas antes (${turnoP?.peopleBefore})`);
+  ok(altaP.body?.bienvenida === true, "avisa al cerebro que la bienvenida la manda el CRM");
+  const bienvenida = await hasta(async () => (await salientes(P)).find((m) => textoDe(m).includes("¡hola!")));
+  ok(
+    Boolean(bienvenida) && textoDe(bienvenida).includes(turnoP.code) && textoDe(bienvenida).includes(turnoP.link),
+    `bienvenida: «${textoDe(bienvenida ?? {}).split("\n")[0]}»`
+  );
   // Q se suma detrás de P: su «ya casi» llega cuando le quede uno adelante.
   const Q = tel(2);
   await escribe(Q, "Quique Paciente", "turno para hoy");
@@ -312,6 +320,11 @@ try {
   await api("POST", `/api/turnos/agendas/${agenda.id}/close`);
   await api("POST", `/api/turnos/agendas/${agendaCitas.id}/close`);
   await api("PATCH", `/api/turnos/agendas/${agendaCitas.id}`, { ...CITAS, receivesBookings: false, active: false });
+  await api("PATCH", `/api/turnos/agendas/${agenda.id}`, { ...AGENDA, active: false });
+  if (recibiaCitas) {
+    const { id, organizationId: _o, createdAt: _c, updatedAt: _u, ...resto } = recibiaCitas;
+    await api("PATCH", `/api/turnos/agendas/${id}`, { ...resto, receivesBookings: true });
+  }
   if (agenteEstaba) await api("PUT", "/api/agent/profile", { enabled: true });
 }
 

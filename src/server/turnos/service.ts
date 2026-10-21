@@ -73,6 +73,7 @@ function paraEstimar(t: TurnRow): EstimateTurn {
     scheduledAt: t.scheduledAt,
     startedAt: t.startedAt,
     finishedAt: t.finishedAt,
+    joinedAt: t.joinedAt,
   };
 }
 
@@ -738,6 +739,7 @@ export async function avisar(organizationId: string, agendaId: string, now = new
     estimate: estimateAgenda(turns.map(paraEstimar), agenda.slotMinutes, now),
     timezone: tz,
     yaAvisados: new Set(ya.map((n) => `${n.turnId}|${n.kind}`)),
+    linkDe: linkDelTurno,
   });
 
   for (const a of avisos) {

@@ -9,6 +9,8 @@ export type EstimateTurn = {
   scheduledAt: Date | null; // null for queue turns
   startedAt: Date | null;
   finishedAt: Date | null;
+  /** 039 — Cuándo se sumó. En una fila mixta ordena a quien vino sin cita. */
+  joinedAt?: Date | null;
 };
 
 export type TurnEstimate = { peopleBefore: number; estimatedAt: Date };
@@ -57,7 +59,7 @@ export function estimateAgenda(turns: EstimateTurn[], slotMinutes: number, now: 
     .sort(
       (a, b) =>
         Number(b.status === "called") - Number(a.status === "called") ||
-        (a.scheduledAt?.getTime() ?? 0) - (b.scheduledAt?.getTime() ?? 0) ||
+        turno(a) - turno(b) ||
         a.number - b.number,
     );
 
@@ -69,6 +71,21 @@ export function estimateAgenda(turns: EstimateTurn[], slotMinutes: number, now: 
   });
 
   return { averageMinutes: avg / MINUTE, delayMinutes: delayMinutes(turns), turns: estimates };
+}
+
+/**
+ * 039 — La hora que le «toca» a cada uno en la fila: la de su cita, o la hora
+ * en que se sumó si vino sin cita. Así, en una agenda que mezcla citas y gente
+ * sin turno, la cita de las 16:00 pasa delante de quien llegó a las 16:05, y
+ * detrás de quien estaba desde las 15:30. Sin `joinedAt` (agendas solo de
+ * fila o solo de citas, como en el POC) el orden es el de antes.
+ *
+ * ponytail: quien llega sin cita cinco minutos antes de una cita la atrasa;
+ * si molesta, reservar el hueco de la cita (que la gente sin turno solo tome
+ * los huecos que caben antes).
+ */
+function turno(t: EstimateTurn): number {
+  return t.scheduledAt?.getTime() ?? t.joinedAt?.getTime() ?? 0;
 }
 
 /** Times shown to people are rounded to the nearest 5 minutes. */

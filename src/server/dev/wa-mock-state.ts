@@ -123,3 +123,13 @@ const boot = Math.random().toString(36).slice(2, 8);
 export function nextOutboundWamid(): string {
   return `wamid.mock.out.${boot}.${nextN()}`;
 }
+
+/**
+ * Lo mismo para entrantes y echoes: sin el sello, tras reiniciar `pnpm dev`
+ * el `wamid.mock.in.1` ya estaba en la BD y la ingesta lo descartaba en
+ * silencio como duplicado (el contacto y la conversación nacían, el mensaje
+ * no).
+ */
+export function nextMockWamid(tipo: "in" | "echo"): string {
+  return `wamid.mock.${tipo}.${boot}.${nextN()}`;
+}

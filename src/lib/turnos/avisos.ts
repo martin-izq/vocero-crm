@@ -50,6 +50,8 @@ export function avisosPendientes(input: {
   timezone: string;
   /** `${turnId}|${kind}` de lo ya avisado. */
   yaAvisados: Set<string>;
+  /** El link en vivo de cada turno (lo arma el servidor). */
+  linkDe?: (turnId: string) => string;
 }): Aviso[] {
   const { negocio, agenda, estimate, timezone, yaAvisados } = input;
   const out: Aviso[] = [];
@@ -77,11 +79,33 @@ export function avisosPendientes(input: {
     if (!est) continue;
     const hora = horaLocal(roundToFive(est.estimatedAt), timezone);
 
+    // Bienvenida: el primer mensaje del CRM sobre este turno se presenta,
+    // con todo lo que el paciente necesita. Sin ella, lo primero que podía
+    // recibir era un «ya casi» suelto, sin saber de quién ni de qué. En esa
+    // misma pasada no sale nada más: sería repetir lo mismo.
+    if (!yaAvisados.has(`${t.id}|alta`)) {
+      const link = input.linkDe ? `\nSeguilo en vivo: ${input.linkDe(t.id)}` : "";
+      const cita = t.scheduledAt
+        ? `Tu cita de las ${horaLocal(t.scheduledAt, timezone)} en ${agenda.name} ya está en la fila de hoy, con el número ${code}.`
+        : `Te anotamos para hoy en ${agenda.name}. Tu número es el ${code}.`;
+      const cuando =
+        est.peopleBefore === 0
+          ? `Sos el próximo (≈ ${hora}).`
+          : `${antesQueVos(est.peopleBefore)} (te atienden ≈ ${hora}).`;
+      push(t, {
+        kind: "alta",
+        text: `${negocio}: ¡hola! ${cita} ${cuando}${link}\nTe aviso por acá cuando falte poco y cuando sea tu turno.`,
+      });
+      if (t.conversationId) continue;
+    }
+
     if (est.peopleBefore <= agenda.notifyBefore) {
       const antes =
         est.peopleBefore === 0
           ? "sos el próximo"
-          : `faltan ${est.peopleBefore} ${est.peopleBefore === 1 ? "persona" : "personas"}`;
+          : est.peopleBefore === 1
+            ? "falta 1 persona"
+            : `faltan ${est.peopleBefore} personas`;
       push(t, {
         kind: "pronto",
         text: t.confirmedAt
@@ -110,4 +134,8 @@ export function avisosPendientes(input: {
     }
   }
   return out;
+}
+
+function antesQueVos(n: number): string {
+  return n === 1 ? "Hay 1 persona antes que vos" : `Hay ${n} personas antes que vos`;
 }

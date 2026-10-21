@@ -110,3 +110,18 @@ test("attentionOrder puts the turn in service first and drops finished ones", ()
   ];
   expect(attentionOrder(turns, estimateAgenda(turns, 10, T)).map((t) => t.id)).toEqual(["now", "w1", "w2"]);
 });
+
+test("039 — fila mixta: la cita pasa por su hora, no después de toda la gente sin turno", () => {
+  const sin = (id: string, n: number, joined: number): EstimateTurn => ({
+    id, number: n, status: "waiting", scheduledAt: null, startedAt: null, finishedAt: null, joinedAt: at(joined),
+  });
+  const cita: EstimateTurn = {
+    id: "c", number: 3, status: "waiting", scheduledAt: at(20), startedAt: null, finishedAt: null, joinedAt: at(-60),
+  };
+  // Uno vino antes de la hora de la cita y otro después: la cita va en el medio.
+  const est = estimateAgenda([sin("a", 1, -10), sin("b", 2, 25), cita], 15, T);
+  expect(est.turns.get("a")!.peopleBefore).toBe(0);
+  expect(est.turns.get("c")!.peopleBefore).toBe(1);
+  expect(est.turns.get("b")!.peopleBefore).toBe(2);
+  expect(est.turns.get("c")!.estimatedAt).toEqual(at(20));
+});

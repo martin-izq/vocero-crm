@@ -67,5 +67,7 @@ export async function POST(req: Request) {
   }
   const estado = await estadoParaContacto(organizationId, conv.contact.id);
   const turno = estado.turnos.find((t) => t.id === r.turn.id);
-  return Response.json({ turno, now: estado.now }, { status: 201 });
+  // `bienvenida`: el CRM le manda por este chat el número, la espera y el
+  // link. El cerebro confirma corto en vez de repetirlos.
+  return Response.json({ turno, now: estado.now, bienvenida: true }, { status: 201 });
 }

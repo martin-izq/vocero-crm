@@ -14,14 +14,16 @@ function turno(n: number, extra: Partial<AvisoTurno> = {}): AvisoTurno & { start
   };
 }
 
-function avisos(turns: ReturnType<typeof turno>[], ya: string[] = []) {
+/** Por defecto la bienvenida ya salió: los demás casos miran lo que sigue. */
+function avisos(turns: ReturnType<typeof turno>[], ya: string[] = [], { conAlta = true } = {}) {
   return avisosPendientes({
     negocio: "Centro Norte",
     agenda,
     turns,
     estimate: estimateAgenda(turns, 15, NOW),
     timezone: TZ,
-    yaAvisados: new Set(ya),
+    yaAvisados: new Set([...ya, ...(conAlta ? turns.map((t) => `${t.id}|alta`) : [])]),
+    linkDe: (id) => `https://crm.test/t/${id}`,
   });
 }
 
@@ -30,8 +32,23 @@ describe("avisos de turnos", () => {
     const a = avisos([1, 2, 3, 4].map((n) => turno(n)));
     expect(a.map((x) => `${x.turnId}:${x.kind}`)).toEqual(["t1:pronto", "t2:pronto", "t3:pronto"]);
     expect(a[0]!.text).toContain("sos el próximo");
+    expect(a[1]!.text).toContain("falta 1 persona");
     expect(a[2]!.text).toContain("faltan 2 personas");
     expect(a[0]!.buttons?.map((b) => b.id)).toEqual(["turno:si:t1", "turno:no:t1"]);
+  });
+
+  it("el primer mensaje es una bienvenida con el negocio, el número, la espera y el link; nada más en esa pasada", () => {
+    const a = avisos([turno(1), turno(2), turno(3)], [], { conAlta: false });
+    expect(a.map((x) => `${x.turnId}:${x.kind}`)).toEqual(["t1:alta", "t2:alta", "t3:alta"]);
+    expect(a[0]!.text).toMatch(/^Centro Norte: ¡hola! Te anotamos para hoy en Clínica general\. Tu número es el A-1\. Sos el próximo/);
+    expect(a[1]!.text).toContain("Hay 1 persona antes que vos");
+    expect(a[2]!.text).toContain("Hay 2 personas antes que vos");
+    expect(a[0]!.text).toContain("Seguilo en vivo: https://crm.test/t/t1");
+  });
+
+  it("la bienvenida de una cita nombra su hora", () => {
+    const [a] = avisos([turno(1, { scheduledAt: at(30) })], [], { conAlta: false });
+    expect(a!.text).toContain("Tu cita de las 15:30 en Clínica general ya está en la fila de hoy, con el número A-1");
   });
 
   it("lo ya avisado no se repite; sin conversación no se avisa", () => {
