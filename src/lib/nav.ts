@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  ClipboardList,
   ChartColumn,
   FlaskConical,
   Inbox,
@@ -49,10 +50,13 @@ export const SETTINGS_ITEM: NavItem = {
  */
 export function appNavGroups({
   agenda = false,
+  turnos = false,
   role,
 }: {
   /** 015 — "Citas" solo existe si esta instancia encendió la agenda. */
   agenda?: boolean;
+  /** 039 — "Turnos" (la fila del día) solo con la bandera `TURNOS`. */
+  turnos?: boolean;
   /** #86 — La guía de inicio solo para quien puede configurar. */
   role?: string | null;
 }): NavGroup[] {
@@ -64,6 +68,7 @@ export function appNavGroups({
   // Citas va después de Contactos: es el paso siguiente de un trato, no una
   // sección aparte.
   if (agenda) trabajo.push({ href: "/bookings", label: "Citas", icon: CalendarDays });
+  if (turnos) trabajo.push({ href: "/turnos", label: "Turnos", icon: ClipboardList });
 
   const agente: NavItem[] = [];
   // Un miembro del equipo no puede hacer ninguno de los pasos de la guía.

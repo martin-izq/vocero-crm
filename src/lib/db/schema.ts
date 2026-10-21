@@ -1,6 +1,7 @@
 import {
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -1273,4 +1274,150 @@ export const dispatch = pgTable(
     // La consulta del worker: pendientes cuya ventana ya venció.
     index("dispatch_status_notbefore_idx").on(t.status, t.notBefore),
   ]
+);
+
+/* ============================================================
+ * 039 — Turnos en vivo (tras la bandera `TURNOS`)
+ * ============================================================ */
+
+/**
+ * Una fila de atención del día: un profesional o un servicio. No es la agenda
+ * de citas (`calendar_settings`, una por negocio): es por dónde pasa la gente
+ * HOY, con o sin cita.
+ */
+export const queueAgenda = pgTable(
+  "queue_agenda",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Consultorio o box: lo que la sala y el aviso de «es tu turno» nombran. */
+    room: text("room").notNull().default(""),
+    /** `queue`: fila por número · `gaps`: toma el próximo hueco libre · `none`: solo con cita. */
+    walkInMode: text("walk_in_mode", { enum: ["queue", "gaps", "none"] })
+      .notNull()
+      .default("queue"),
+    slotMinutes: integer("slot_minutes").notNull().default(15),
+    /** Hora de PARED del negocio, "HH:MM". */
+    opensAt: text("opens_at").notNull().default("09:00"),
+    closesAt: text("closes_at").notNull().default("18:00"),
+    numberPrefix: text("number_prefix").notNull(),
+    /** Cuántas personas antes se avisa «ya casi» (y se pregunta si viene). */
+    notifyBefore: integer("notify_before").notNull().default(2),
+    /** Las citas del día de la agenda de Citas entran a ESTA fila. */
+    receivesBookings: boolean("receives_bookings").notNull().default(false),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("queue_agenda_org_prefix_uq").on(t.organizationId, t.numberPrefix),
+    check("queue_agenda_slot_ck", sql`${t.slotMinutes} > 0`),
+  ]
+);
+
+export const TURN_STATUSES = [
+  "waiting",
+  "called",
+  "in_service",
+  "finished",
+  "cancelled",
+  "absent",
+] as const;
+
+export const turn = pgTable(
+  "turn",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    agendaId: text("agenda_id")
+      .notNull()
+      .references(() => queueAgenda.id, { onDelete: "cascade" }),
+    /** Día de PARED del negocio. */
+    day: date("day", { mode: "string" }).notNull(),
+    number: integer("number").notNull(),
+    displayName: text("display_name").notNull(),
+    /** Null en la fila por número; la hora de la cita o del hueco tomado, si no. */
+    scheduledAt: timestamp("scheduled_at"),
+    status: text("status", { enum: TURN_STATUSES }).notNull().default("waiting"),
+    /** SHA-256 del token del link: el token en claro no se guarda. */
+    tokenHash: text("token_hash").notNull(),
+    source: text("source", { enum: ["whatsapp", "reception", "booking"] }).notNull(),
+    contactId: text("contact_id").references(() => contact.id, { onDelete: "set null" }),
+    conversationId: text("conversation_id").references(() => conversation.id, {
+      onDelete: "set null",
+    }),
+    bookingId: text("booking_id").references(() => booking.id, { onDelete: "set null" }),
+    joinedAt: timestamp("joined_at").notNull().defaultNow(),
+    calledAt: timestamp("called_at"),
+    startedAt: timestamp("started_at"),
+    finishedAt: timestamp("finished_at"),
+    /** Respondió «Sí, voy» a la pregunta de si viene. */
+    confirmedAt: timestamp("confirmed_at"),
+    /** Un aviso por WhatsApp falló: recepción lo llama en la sala. */
+    noticeFailed: boolean("notice_failed").notNull().default(false),
+    statusChangedBy: text("status_changed_by", {
+      enum: ["client", "reception", "agent", "system"],
+    }),
+    statusChangedAt: timestamp("status_changed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("turn_token_uq").on(t.tokenHash),
+    uniqueIndex("turn_agenda_day_number_uq").on(t.agendaId, t.day, t.number),
+    /** Una cita entra a la fila una sola vez. */
+    uniqueIndex("turn_booking_uq").on(t.bookingId),
+    /** Un turno activo por agenda por día para cada persona (PLAN-MVP §3). */
+    uniqueIndex("turn_contact_activo_uq")
+      .on(t.agendaId, t.day, t.contactId)
+      .where(sql`${t.status} in ('waiting','called','in_service') and ${t.contactId} is not null`),
+    index("turn_org_day_idx").on(t.organizationId, t.day),
+  ]
+);
+
+export const turnEvent = pgTable(
+  "turn_event",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    turnId: text("turn_id")
+      .notNull()
+      .references(() => turn.id, { onDelete: "cascade" }),
+    fromStatus: text("from_status", { enum: TURN_STATUSES }),
+    toStatus: text("to_status", { enum: TURN_STATUSES }).notNull(),
+    actor: text("actor", { enum: ["client", "reception", "agent", "system"] }).notNull(),
+    /** Quién del equipo, si fue recepción. */
+    userId: text("user_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("turn_event_turn_idx").on(t.turnId)]
+);
+
+/**
+ * Un aviso por WhatsApp ya decidido. La clave única (turno, tipo) es lo que
+ * hace idempotente al avisador: se puede recalcular cuantas veces se quiera.
+ */
+export const turnNotice = pgTable(
+  "turn_notice",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    turnId: text("turn_id")
+      .notNull()
+      .references(() => turn.id, { onDelete: "cascade" }),
+    /** `alta`, `pronto`, `llamado:<n>`, `demora:<tramo>`. */
+    kind: text("kind").notNull(),
+    status: text("status", { enum: ["sent", "failed"] }).notNull(),
+    error: text("error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("turn_notice_turn_kind_uq").on(t.turnId, t.kind)]
 );

@@ -16,6 +16,7 @@ export type ClaveHerramienta =
   | "etapa"
   | "agendar"
   | "reprogramar"
+  | "turnos"
   | "salida"
   | "escalar";
 
@@ -25,6 +26,8 @@ export type Herramienta = {
   descripcion: string;
   /** Solo existe con la bandera `AGENDA` encendida. */
   agenda?: true;
+  /** 039 — Solo existe con la bandera `TURNOS` encendida. */
+  turnos?: true;
   /** Red de seguridad: no se apaga (spec 034, D2). */
   fija?: true;
 };
@@ -56,6 +59,14 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
     etiqueta: "Reprogramar citas",
     descripcion: "Mueve una cita ya reservada a otro horario ofrecido.",
     agenda: true,
+  },
+  {
+    // 039 — La fila de hoy: sumarse, cuánto falta, cancelar.
+    clave: "turnos",
+    etiqueta: "Turnos en vivo",
+    descripcion:
+      "Saca turno para hoy, dice cuántas personas faltan y a qué hora lo atienden, y cancela si no puede venir.",
+    turnos: true,
   },
   {
     clave: "salida",

@@ -463,6 +463,57 @@ export async function sendText(input: {
 }
 
 /**
+ * 039 — Texto con botones de respuesta rápida (mensaje interactivo de
+ * WhatsApp, hasta 3). La respuesta vuelve por el webhook con el `id` del botón.
+ * Solo WhatsApp: en otro canal se manda el texto solo. En el hilo queda el
+ * texto con los rótulos, que es lo que el cliente vio.
+ */
+export async function sendButtons(input: {
+  conversationId: string;
+  organizationId: string;
+  text: string;
+  buttons: { id: string; title: string }[];
+  aiGenerated?: boolean;
+}): Promise<SendResult> {
+  const target = await prepareSend(
+    input.conversationId,
+    input.organizationId,
+    input.aiGenerated ?? false
+  );
+  if (!target.credentials || target.conversation.channel !== "whatsapp") {
+    return sendText(input);
+  }
+  const waMessageId = await callGraphSend(target.credentials, {
+    messaging_product: "whatsapp",
+    ...target.destinatario,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: { text: input.text },
+      action: {
+        buttons: input.buttons.slice(0, 3).map((b) => ({
+          type: "reply",
+          // Meta corta el rótulo a 20 caracteres y el id a 256.
+          reply: { id: b.id.slice(0, 256), title: b.title.slice(0, 20) },
+        })),
+      },
+    },
+  });
+  const text = `${input.text}\n${input.buttons.map((b) => `[${b.title}]`).join(" ")}`;
+  const messageId = await persistOutbound({
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
+    waMessageId,
+    type: "text",
+    text,
+    status: "pending",
+    aiGenerated: input.aiGenerated,
+    origin: input.aiGenerated ? "ai" : "operator",
+  });
+  return { messageId };
+}
+
+/**
  * 008 — Envía un adjunto de archivo (imagen/video/audio/documento).
  * El archivo queda ANTES en el volumen local (fuente durable de la preview);
  * si Graph falla tras eso, el mensaje se persiste `failed` (visible en el

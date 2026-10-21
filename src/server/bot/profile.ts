@@ -1,6 +1,7 @@
 import type { schema } from "@/lib/db";
 import { renderKb } from "@/server/ai/prompts";
 import { herramientasEfectivas, rolDe } from "@/lib/agent-roles";
+import { turnosEnabled } from "@/server/turnos/flag";
 
 type AgentProfile = typeof schema.agentProfile.$inferSelect;
 type KbEntry = typeof schema.kbEntry.$inferSelect;
@@ -33,7 +34,8 @@ export function serializeBotProfile(profile: AgentProfile, kb: KbEntry[], llm: B
       escalationRules: profile.escalationRules ?? null,
       greeting: profile.greeting ?? null,
       role: rolDe(profile.role).clave,
-      tools: herramientasEfectivas(profile.tools),
+      // 039 — sin la bandera, la herramienta de turnos no existe para el cerebro.
+      tools: herramientasEfectivas(profile.tools).filter((t) => t !== "turnos" || turnosEnabled()),
     },
     kb: renderKb(kb),
     resources: [] as { label: string; url: string }[],

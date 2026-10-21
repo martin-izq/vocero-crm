@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiError, parseBody, withAuth, withConfigAuth } from "@/lib/api";
+import { apiError, parseBody, withConfigAuth } from "@/lib/api";
 import { agendaDisabledResponse, agendaEnabled } from "@/server/agenda/flag";
 import { googleConnector } from "@/server/agenda/connectors/google";
 import { getGoogleCredentials } from "@/server/agenda/connectors/google-credentials";

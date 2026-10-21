@@ -1,4 +1,4 @@
-import { apiError, withAuth, withConfigAuth } from "@/lib/api";
+import { apiError, withConfigAuth } from "@/lib/api";
 import { getDb } from "@/lib/db";
 import { isDomainEmpty, seedDemo } from "@/server/seed/demo";
 

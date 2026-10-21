@@ -1,4 +1,4 @@
-import { apiError, parseBody, withAuth, withConfigAuth } from "@/lib/api";
+import { apiError, parseBody, withConfigAuth } from "@/lib/api";
 import { listModels } from "@/lib/ai/probe";
 import {
   aiModelsSchema,

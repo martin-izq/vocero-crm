@@ -49,6 +49,7 @@ export function AgentClient() {
   // servidor, tal cual, junto al interruptor.
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [agendaEnabled, setAgendaEnabled] = useState(false);
+  const [turnosEnabled, setTurnosEnabled] = useState(false);
   // «Quién responde»: se refresca solo, porque la última llamada del cerebro
   // externo y su /health cambian sin que nadie toque esta pantalla.
   const [brain, setBrain] = useState<BrainStatusDto | null>(null);
@@ -72,6 +73,7 @@ export function AgentClient() {
       setAiConfigured(p.aiConfigured);
       setAiMensaje(p.aiMensaje ?? null);
       setAgendaEnabled(p.agendaEnabled === true);
+      setTurnosEnabled(p.turnosEnabled === true);
     }
     if (kb) setEntries(kb.entries);
     if (size) setKbSize(size);
@@ -213,6 +215,7 @@ export function AgentClient() {
         <RolSection
           profile={profile}
           agendaEnabled={agendaEnabled}
+          turnosEnabled={turnosEnabled}
           onTools={(tools) => void saveProfile({ tools })}
           onPreset={() => void cargarPreset()}
         />
@@ -230,16 +233,20 @@ export function AgentClient() {
 function RolSection({
   profile,
   agendaEnabled,
+  turnosEnabled,
   onTools,
   onPreset,
 }: {
   profile: Profile;
   agendaEnabled: boolean;
+  turnosEnabled: boolean;
   onTools: (tools: ClaveHerramienta[]) => void;
   onPreset: () => void;
 }) {
   const rol = ROLES[profile.role as keyof typeof ROLES] ?? ROLES.calificador;
-  const visibles = HERRAMIENTAS.filter((h) => !h.agenda || agendaEnabled);
+  const visibles = HERRAMIENTAS.filter(
+    (h) => (!h.agenda || agendaEnabled) && (!h.turnos || turnosEnabled)
+  );
   const encendida = (clave: ClaveHerramienta) => profile.tools.includes(clave);
   function cambiar(clave: ClaveHerramienta, on: boolean) {
     const siguiente = on

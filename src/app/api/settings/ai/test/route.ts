@@ -1,4 +1,4 @@
-import { apiError, parseBody, withAuth, withConfigAuth } from "@/lib/api";
+import { apiError, parseBody, withConfigAuth } from "@/lib/api";
 import { probeProvider } from "@/lib/ai/probe";
 import { apiRoot } from "@/lib/ai/presets";
 import { getAiCredentialPublic, marcarActiva } from "@/server/ai/credentials";

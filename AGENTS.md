@@ -70,6 +70,7 @@ Banderas de despliegue (apagadas por defecto; su código viaja siempre en `main`
 |---|---|
 | `AGENDA=on` | Motor de citas: pantalla Citas, Ajustes → Agenda, `/api/bookings`, `/api/calendar/*`, `/api/bot/availability` y `/api/bot/bookings` (`src/server/agenda/flag.ts`) |
 | `CHANNELS=whatsapp,instagram,messenger,tiktok` | Canales extra: webhooks `/api/webhooks/ig`, `/api/webhooks/messenger` y `/api/webhooks/tiktok`, Ajustes → Estado, Instagram, Messenger y TikTok, credenciales por canal, distintivo en la bandeja (`src/server/channels/enabled.ts`) |
+| `TURNOS=on` | 039 — Turnos en vivo: pantalla Turnos (recepción), `/t/<token>` (link del paciente), `/sala`, `/api/turnos/*`, `/api/bot/turnos` y los avisos por WhatsApp («ya casi», «es tu turno», demora). Con `AGENDA`, las citas del día entran a la fila (`src/server/turnos/flag.ts`, spec `specs/039-turnos-en-vivo/`) |
 | `ATRIBUCION=on` | Guardado del `ctwa_clid`, reporte a la Conversions API de Meta, Ajustes → Anuncios y `/api/settings/capi` (`src/server/attribution/flag.ts`). El anuncio de origen se ve siempre, con o sin bandera |
 
 Apagada, cada superficie responde 404 (no 403). El despliegue en producción está en el README («Instalación»: Rutas A y B, y «Otras plataformas» con `render.yaml`, `fly.toml` y `railway.toml`) y en `INSTALL-IA.md`; no se repite aquí.
@@ -80,6 +81,7 @@ Apagada, cada superficie responde 404 (no 403). El despliegue en producción est
 
 | Carpeta | Responsabilidad | Entrada |
 |---|---|---|
+| `turnos/` | 039 — Turnos en vivo tras `TURNOS`: fila del día, transiciones idempotentes, avisos por WhatsApp (`avisar`, deduplicado en `turn_notice`), botones «Sí, voy»/«No voy a poder» (`botones.ts`, desde la ingesta), citas de hoy a la fila, SSE público. La lógica pura (estimación, estados, huecos, avisos) vive en `src/lib/turnos/` | `service.ts`, `botones.ts`, `sse.ts`, `flag.ts` |
 | `agenda/` | Motor de citas: horarios, huecos, ofertas, reservas y conectores (enlace fijo, Zoom, Google) | `service.ts`, `flag.ts`, `http.ts`, `connectors/index.ts` |
 | `ai/` | Ya no hay turno dentro del proceso (036). Queda la credencial del proveedor de IA por organización (cifrada; estado `active` o pausada por 401/402), lo que valida y devuelve Ajustes → IA, el aviso de «sin IA» y, de `prompts.ts`, solo `renderKb` (el conocimiento para el perfil) y el prompt del juez (`JUDGE_MARKER`, `buildJudgePrompt`) | `credentials.ts`, `settings.ts`, `aviso.ts`, `prompts.ts` |
 | `analytics/` | Números de Resultados (ventas, agente, anuncios, higiene) agregados en SQL; excluye el Laboratorio | `sales.ts`, `bot.ts`, `ads.ts`, `hygiene.ts`, `shared.ts` |
@@ -171,6 +173,8 @@ La ráfaga del despacho es lo posterior al último saliente más lo que el despa
 | `POST /api/bot/reset` | Reiniciar una conversación de pruebas |
 | `GET /api/bot/availability` | Con AGENDA: huecos para ofrecer (quedan registrados como ofrecidos) |
 | `POST` · `PATCH /api/bot/bookings` | Con AGENDA: reservar (201) o mover (200) solo un hueco ofrecido |
+| `GET` · `POST /api/bot/turnos` | 039 — Con TURNOS: la fila de hoy (espera por agenda, turnos del contacto con link) y sacar turno (201; 409 `ya_tiene_turno`, `sin_fila`, `cerrada`, `sin_lugar`) |
+| `POST /api/bot/turnos/{id}` | 039 — Con TURNOS: `cancel` (solo en espera) o `confirm` un turno de hoy del contacto |
 
 Documentación: README («Tu agente al lado del CRM»), `docs/migrar-a-2.0.md`, guion `tests/e2e/us-bot-api.md`, pruebas `tests/unit/bot-*.test.ts` y, para la agenda, `specs/015-motor-agenda-universal/contracts/agenda.md`.
 
@@ -178,7 +182,7 @@ Documentación: README («Tu agente al lado del CRM»), `docs/migrar-a-2.0.md`, 
 
 **Webhooks de entrada** — `GET`/`POST /api/webhooks/wa/[token]` (contrato en `specs/001-vocero-core/contracts/webhook.md`); `/api/webhooks/ig/[token]` y `/api/webhooks/messenger/[token]` aceptan Meta o Zernio por la misma URL y existen solo con su canal en `CHANNELS` (specs 014 y 017); `/api/webhooks/tiktok/[token]` acepta solo Zernio (spec 022). Un evento de Zernio se reparte por plataforma llegue a cuál de las tres llegue, y su firma se verifica en `isAuthenticZernioDelivery` (`src/server/zernio/dispatch.ts`): vale cualquier secreto de Zernio de la organización, o el del webhook que Zernio tiene hacia esta instancia. Siempre 200 tras validar; el procesamiento es asíncrono.
 
-**`GET /api/health`** — `{"ok":true,"version":"X.Y.Z","commit":"…","commitVerified":true|false,"features":{"agenda":bool,"channels":["whatsapp",…],"atribucion":bool,"media":"disco"|"bucket"},"mediaWritable":bool}`; 503 `db_unavailable` sin base. `features` sale de las mismas banderas que deciden los 404 (`AGENDA`, `CHANNELS`, `ATRIBUCION`) y de `MEDIA_STORE`; `mediaWritable: false` no baja `ok` ni el código. **`GET /api/events`** — SSE autenticado por sesión (`specs/001-vocero-core/contracts/sse.md`). La API interna (`specs/001-vocero-core/contracts/api.md`) no es contrato público: la consume solo la UI de este repo.
+**`GET /api/health`** — `{"ok":true,"version":"X.Y.Z","commit":"…","commitVerified":true|false,"features":{"agenda":bool,"channels":["whatsapp",…],"atribucion":bool,"media":"disco"|"bucket","turnos":bool},"mediaWritable":bool}`; 503 `db_unavailable` sin base. `features` sale de las mismas banderas que deciden los 404 (`AGENDA`, `CHANNELS`, `ATRIBUCION`) y de `MEDIA_STORE`; `mediaWritable: false` no baja `ok` ni el código. **`GET /api/events`** — SSE autenticado por sesión (`specs/001-vocero-core/contracts/sse.md`). La API interna (`specs/001-vocero-core/contracts/api.md`) no es contrato público: la consume solo la UI de este repo.
 
 ## Cómo contribuir
 

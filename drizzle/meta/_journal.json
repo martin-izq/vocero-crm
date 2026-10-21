@@ -155,6 +155,13 @@
       "when": 1792517498460,
       "tag": "0021_roles_como_datos",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792603714258,
+      "tag": "0022_turnos_en_vivo",
+      "breakpoints": true
     }
   ]
 }

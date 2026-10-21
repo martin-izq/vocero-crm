@@ -35,6 +35,11 @@ const prefixes = {
   dispatch: "dsp",
   // 026 — el aviso de que una conversación se eliminó
   olvido: "olv",
+  // 039 — turnos en vivo
+  queueAgenda: "qa",
+  turn: "tn",
+  turnEvent: "tev",
+  turnNotice: "tno",
 } as const;
 
 export type IdKind = keyof typeof prefixes;

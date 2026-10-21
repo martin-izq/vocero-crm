@@ -9,6 +9,42 @@
   "servers": [{ "url": "https://tu-crm.example.com" }],
   "security": [{ "botKey": [] }],
   "paths": {
+    "/api/bot/turnos": {
+      "get": {
+        "summary": "Turnos en vivo: agendas de hoy y los turnos del contacto",
+        "description": "039 — Con la bandera TURNOS (si no, 404). Las agendas activas con cuánta gente espera y la espera estimada AHORA, y los turnos activos de hoy del contacto de la conversación. Los números los calcula el CRM: el cerebro los repite, no los inventa.",
+        "parameters": [{"name": "conversationId", "in": "query", "required": true, "schema": {"type": "string"}}],
+        "responses": {
+          "200": {"description": "Estado de hoy", "content": {"application/json": {"schema": {"type": "object", "properties": {"timezone": {"type": "string"}, "now": {"type": "string", "description": "HH:MM en la zona del negocio"}, "agendas": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "walkIn": {"type": "boolean", "description": "false: solo con cita"}, "peopleWaiting": {"type": "integer"}, "waitMinutes": {"type": "integer"}, "opensAt": {"type": "string"}, "closesAt": {"type": "string"}}}}, "turnos": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "agendaId": {"type": "string"}, "agenda": {"type": "string"}, "room": {"type": "string"}, "code": {"type": "string", "examples": ["A-27"]}, "status": {"enum": ["waiting", "called", "in_service"]}, "scheduledAt": {"type": ["string", "null"], "description": "Hora de la cita en la zona del negocio (HH:MM), o null en la fila por número"}, "peopleBefore": {"type": "integer"}, "estimatedAt": {"type": ["string", "null"], "description": "Hora estimada de atención (HH:MM, zona del negocio)"}, "confirmed": {"type": "boolean"}, "link": {"type": "string", "description": "Link en vivo del turno, para mandarle al paciente"}}}}}}}}},
+          "404": {"description": "`not_found`: no existe la conversación", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "422": {"description": "Falta conversationId", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      },
+      "post": {
+        "summary": "Sumar al contacto a la fila de hoy de una agenda",
+        "description": "039 — Un turno activo por agenda por día para cada contacto. La conversación debe tener la IA activa y no ser del Laboratorio.",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["conversationId", "agendaId"], "properties": {"conversationId": {"type": "string"}, "agendaId": {"type": "string"}, "name": {"type": "string", "description": "Nombre a mostrar; sin él, el del contacto"}}}}}},
+        "responses": {
+          "201": {"description": "Turno creado", "content": {"application/json": {"schema": {"type": "object", "properties": {"turno": {"type": "object", "properties": {"id": {"type": "string"}, "agendaId": {"type": "string"}, "agenda": {"type": "string"}, "room": {"type": "string"}, "code": {"type": "string", "examples": ["A-27"]}, "status": {"enum": ["waiting", "called", "in_service"]}, "scheduledAt": {"type": ["string", "null"], "description": "Hora de la cita en la zona del negocio (HH:MM), o null en la fila por número"}, "peopleBefore": {"type": "integer"}, "estimatedAt": {"type": ["string", "null"], "description": "Hora estimada de atención (HH:MM, zona del negocio)"}, "confirmed": {"type": "boolean"}, "link": {"type": "string", "description": "Link en vivo del turno, para mandarle al paciente"}}}, "now": {"type": "string"}}}}}},
+          "404": {"description": "`not_found` (conversación) o `agenda_inexistente`", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "409": {"description": "`ya_tiene_turno`, `sin_fila` (solo con cita), `cerrada`, `sin_lugar`, `ai_paused`, `sandbox_violation`", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "422": {"description": "Cuerpo inválido", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/api/bot/turnos/{id}": {
+      "post": {
+        "summary": "Cancelar o confirmar un turno de hoy del contacto",
+        "description": "039 — `cancel`: solo mientras espera (si ya lo llamaron, 409 `no_cancelable`). `confirm`: «Sí, voy», el aviso de «ya casi» deja de preguntar.",
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["conversationId", "action"], "properties": {"conversationId": {"type": "string"}, "action": {"enum": ["cancel", "confirm"]}}}}}},
+        "responses": {
+          "200": {"description": "Hecho", "content": {"application/json": {"schema": {"type": "object", "properties": {"ok": {"const": true}, "status": {"type": "string"}}}}}},
+          "404": {"description": "`not_found`: la conversación o un turno que no es de este contacto", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "409": {"description": "`no_cancelable`, `ai_paused`", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
     "/api/bot/context": {
       "get": {
         "summary": "Contexto de una conversación",
@@ -256,7 +292,7 @@
       "Perfil": {
         "type": "object",
         "properties": {
-          "profile": { "type": "object", "properties": { "name": { "type": "string" }, "tone": { "type": ["string", "null"] }, "instructions": { "type": ["string", "null"] }, "escalationRules": { "type": ["string", "null"] }, "greeting": { "type": ["string", "null"] }, "role": { "type": "string", "description": "034 — El rol del agente.", "examples": ["calificador"] }, "tools": { "type": "array", "description": "034 — Las herramientas encendidas. `escalar` siempre. Sin la llave, enciende todas.", "items": { "type": "string", "enum": ["ficha", "etapa", "agendar", "reprogramar", "salida", "escalar"] } } } },
+          "profile": { "type": "object", "properties": { "name": { "type": "string" }, "tone": { "type": ["string", "null"] }, "instructions": { "type": ["string", "null"] }, "escalationRules": { "type": ["string", "null"] }, "greeting": { "type": ["string", "null"] }, "role": { "type": "string", "description": "034 — El rol del agente.", "examples": ["calificador"] }, "tools": { "type": "array", "description": "034 — Las herramientas encendidas. `escalar` siempre. Sin la llave, enciende todas.", "items": { "type": "string", "enum": ["ficha", "etapa", "agendar", "reprogramar", "turnos", "salida", "escalar"] } } } },
           "kb": { "type": "string" },
           "resources": { "type": "array", "items": { "type": "object", "properties": { "label": { "type": "string" }, "url": { "type": "string" } } } },
           "llm": {

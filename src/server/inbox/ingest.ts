@@ -25,6 +25,7 @@ import { registrarAnuncioDeOrigen } from "@/server/attribution/store";
 import { onLeadActivity } from "@/server/inbox/lead-activity";
 import { despachoActivo } from "@/server/brains/config";
 import { despacharAlCerebro } from "@/server/dispatch/encolar";
+import { atenderBotonDeTurno } from "@/server/turnos/botones";
 
 /** Tipos de contenido soportados; el resto se ignora sin error. */
 const SUPPORTED_TYPES = new Set([
@@ -307,6 +308,8 @@ export async function processMessagesValue(value: WebhookValue): Promise<void> {
       // 018: normalizado aquí, en el adaptador del canal; la ingesta no sabe
       // de qué forma lo mandó Meta.
       anuncio: anuncioDeWhatsapp(msg.referral),
+      // 039 — el id del botón (no se guarda: solo decide si lo atiende turnos).
+      botonId: msg.interactive?.button_reply?.id ?? null,
     });
   }
 }
@@ -442,6 +445,8 @@ export async function ingestInboundMessage(input: {
   threadRef?: string | null;
   /** 016/018: el anuncio que abrió la conversación, ya normalizado por el canal. */
   anuncio?: AnuncioDeOrigen | null;
+  /** 039 — id del botón interactivo que tocó el cliente, si fue eso. */
+  botonId?: string | null;
 }): Promise<void> {
   const db = getDb();
   const { organizationId } = input;
@@ -528,6 +533,24 @@ export async function ingestInboundMessage(input: {
     type: "conversation.updated",
     data: { conversation: { id: conversation.id } },
   });
+
+  // 039 — «Sí, voy» / «No voy a poder» de un aviso de turno: lo resuelve el
+  // CRM y el cerebro no vuelve a contestar.
+  if (
+    input.botonId &&
+    !conversation.isTest &&
+    (await atenderBotonDeTurno({
+      organizationId,
+      contactId: contact.id,
+      conversationId: conversation.id,
+      botonId: input.botonId,
+    }).catch((err) => {
+      console.warn("[turnos] botón no atendido:", err);
+      return false;
+    }))
+  ) {
+    return;
+  }
 
   // 036 — Quien contesta es el cerebro conectado; sin él, una persona. El
   // 025: `message.id` es lo que el despacho le debe al cerebro.

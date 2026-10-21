@@ -26,6 +26,8 @@ export type SseEvent =
     }
   /** 015 — algo cambió en la agenda: la pantalla de Citas se refresca sola. */
   | { type: "booking.updated"; data: { bookingId: string } }
+  /** 039 — algo cambió en una fila de turnos: recepción, sala y links refrescan. */
+  | { type: "turno.changed"; data: { agendaId: string } }
   | {
       type: "lab.run";
       data: {

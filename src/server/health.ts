@@ -46,6 +46,8 @@ export type HealthFeatures = {
   /** 037 — Dónde pidió quien instala guardar los adjuntos: bandera
    *  `MEDIA_STORE`. Si de verdad se puede escribir ahí lo dice `mediaWritable`. */
   media: "disco" | "bucket";
+  /** 039 — Turnos en vivo: bandera `TURNOS`. */
+  turnos: boolean;
 };
 
 export type HealthOk = {
@@ -74,6 +76,7 @@ export type FlagEnv = {
   AGENDA?: string;
   CHANNELS?: string;
   ATRIBUCION?: string;
+  TURNOS?: string;
   MEDIA_STORE?: string;
   [otra: string]: string | undefined;
 };
@@ -91,6 +94,7 @@ export function healthFeatures(env: FlagEnv = process.env): HealthFeatures {
     channels: CHANNEL_ORDER.filter((c) => channels.has(c)),
     atribucion: parseAtribucionFlag(env.ATRIBUCION),
     media: env.MEDIA_STORE?.trim().toLowerCase() === "bucket" ? "bucket" : "disco",
+    turnos: parseAgendaFlag(env.TURNOS),
   };
 }
 

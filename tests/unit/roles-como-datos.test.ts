@@ -12,12 +12,13 @@ import { personasDelRol } from "@/server/lab/runner";
 /** 034 — Roles como datos: el catálogo, el Calificador y sus personas. */
 describe("el catálogo de herramientas", () => {
   it("las claves son contrato con el cerebro", () => {
-    expect(CLAVES_HERRAMIENTA).toEqual(["ficha", "etapa", "agendar", "reprogramar", "salida", "escalar"]);
+    expect(CLAVES_HERRAMIENTA).toEqual(["ficha", "etapa", "agendar", "reprogramar", "turnos", "salida", "escalar"]);
   });
 
   it("escalar es fija y las de agenda lo dicen", () => {
     expect(HERRAMIENTAS.filter((h) => h.fija).map((h) => h.clave)).toEqual(["escalar"]);
     expect(HERRAMIENTAS.filter((h) => h.agenda).map((h) => h.clave)).toEqual(["agendar", "reprogramar"]);
+    expect(HERRAMIENTAS.filter((h) => h.turnos).map((h) => h.clave)).toEqual(["turnos"]);
   });
 
   it("null = todas; una lista vacía deja solo escalar; el orden es el del catálogo", () => {
