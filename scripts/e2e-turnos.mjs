@@ -106,6 +106,8 @@ const AGENDA = {
 // Las citas entran a una agenda aparte, sin historial: así su estimación usa
 // los minutos por persona y la demora es predecible.
 const CITAS = { ...AGENDA, name: "E2E Citas", room: "Box 8", numberPrefix: "Y", receivesBookings: true };
+// Una agenda que atiende solo con reserva (horario elegido, hoy u otro día).
+const RESERVAS = { ...AGENDA, name: "E2E Reservas", room: "Box 7", numberPrefix: "X", walkInMode: "none", slotMinutes: 30 };
 const lista = await api("GET", "/api/turnos/agendas");
 // Para dejarlo como estaba: qué agenda recibía las citas.
 const recibiaCitas = lista.body?.agendas?.find((a) => a.receivesBookings && a.numberPrefix !== "Y");
@@ -124,6 +126,12 @@ agendaCitas = (
     : await api("POST", "/api/turnos/agendas", CITAS)
 ).body.agenda;
 await api("POST", `/api/turnos/agendas/${agendaCitas.id}/close`);
+let agendaReservas = lista.body.agendas.find((a) => a.numberPrefix === "X");
+agendaReservas = (
+  agendaReservas
+    ? await api("PATCH", `/api/turnos/agendas/${agendaReservas.id}`, RESERVAS)
+    : await api("POST", "/api/turnos/agendas", RESERVAS)
+).body.agenda;
 
 const tablero = async (id = agenda.id) => (await api("GET", "/api/turnos/board")).body.agendas.find((a) => a.id === id);
 const accion = (id, expected, to) => api("POST", `/api/turnos/turns/${id}`, { expected, to });
@@ -151,12 +159,9 @@ try {
   ok(altaP.status === 201, `POST /api/bot/turnos → ${altaP.status}`);
   const turnoP = altaP.body?.turno;
   ok(turnoP?.peopleBefore === 2, `tiene 2 personas antes (${turnoP?.peopleBefore})`);
-  ok(altaP.body?.bienvenida === true, "avisa al cerebro que la bienvenida la manda el CRM");
-  const bienvenida = await hasta(async () => (await salientes(P)).find((m) => textoDe(m).includes("¡hola!")));
-  ok(
-    Boolean(bienvenida) && textoDe(bienvenida).includes(turnoP.code) && textoDe(bienvenida).includes(turnoP.link),
-    `bienvenida: «${textoDe(bienvenida ?? {}).split("\n")[0]}»`
-  );
+  ok(altaP.body?.bienvenida === false, "lo saca el cerebro: la confirmación es suya (bienvenida: false)");
+  await esperar(2000);
+  ok(!(await salientes(P)).some((m) => /Te anoté|Te reservé/.test(textoDe(m))), "el CRM no manda una bienvenida encima");
   // Q se suma detrás de P: su «ya casi» llega cuando le quede uno adelante.
   const Q = tel(2);
   await escribe(Q, "Quique Paciente", "turno para hoy");
@@ -236,7 +241,7 @@ try {
   paso("«es tu turno» por WhatsApp y en el link");
   await accion(enCurso.id, "in_service", "finished");
   await accion(turnoP.id, "waiting", "called");
-  const llamado = await hasta(async () => (await salientes(P)).find((m) => textoDe(m).includes("es tu turno")));
+  const llamado = await hasta(async () => (await salientes(P)).find((m) => textoDe(m).includes("¡Es tu turno!")));
   ok(Boolean(llamado), `llega «${textoDe(llamado ?? {})}»`);
   ok(textoDe(llamado ?? {}).includes("Box 9"), "nombra el consultorio");
   ok(Boolean(await hasta(async () => (await link.getByText("Es tu turno").count()) > 0)), "el link pasa a «Es tu turno»");
@@ -277,6 +282,43 @@ try {
   ok(altaN.status === 201 && altaN.body?.turno?.peopleBefore <= AGENDA.notifyBefore, `N entra con ${altaN.body?.turno?.peopleBefore} antes`);
   await esperar(2500);
   ok(!(await salientes(N)).some((m) => m.body?.type === "interactive"), "no le llega «¿Estás viniendo?» al sumarse");
+
+  paso("reservar un turno con horario para mañana");
+  const R = tel(5);
+  await escribe(R, "Rita Reserva", "quiero turno para mañana a las 10");
+  const convR = await conversacionDe(R);
+  const sinHora = await bot("POST", "/api/bot/turnos", { conversationId: convR, agendaId: agendaReservas.id });
+  ok(sinHora.status === 409 && sinHora.body?.error?.code === "sin_fila", "solo con reserva: sin horario → 409 sin_fila");
+  const enFila = await bot("GET", `/api/bot/turnos/huecos?conversationId=${convR}&agendaId=${agenda.id}`);
+  ok(enFila.status === 409 && enFila.body?.error?.code === "sin_reservas", "una fila por número no ofrece horarios → sin_reservas");
+  const hoyR = (await api("GET", "/api/turnos/board")).body.day;
+  const manana = new Date(Date.parse(`${hoyR}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  const libresR = await bot("GET", `/api/bot/turnos/huecos?conversationId=${convR}&agendaId=${agendaReservas.id}&date=${manana}`);
+  const elegido = libresR.body?.huecos?.find((h) => h.time === "10:00");
+  ok(libresR.status === 200 && Boolean(elegido), `huecos de mañana incluyen las 10:00 (${libresR.body?.huecos?.length})`);
+  const reserva = await bot("POST", "/api/bot/turnos", {
+    conversationId: convR,
+    agendaId: agendaReservas.id,
+    startUtc: elegido?.startUtc,
+  });
+  ok(reserva.status === 201, `reserva 201 (${reserva.body?.turno?.code} ${reserva.body?.turno?.dayLabel} ${reserva.body?.turno?.time})`);
+  ok(reserva.body?.turno?.time === "10:00", "la reserva vuelve con su hora");
+  const S2 = tel(6);
+  await escribe(S2, "Saúl Segundo", "yo también a las 10");
+  const convS2 = await conversacionDe(S2);
+  const doble = await bot("POST", "/api/bot/turnos", {
+    conversationId: convS2,
+    agendaId: agendaReservas.id,
+    startUtc: elegido?.startUtc,
+  });
+  ok(
+    doble.status === 409 && doble.body?.error?.code === "hueco_ocupado" && !doble.body.huecos.some((h) => h.time === "10:00"),
+    "el mismo horario para otro → 409 hueco_ocupado, con huecos que ya no lo incluyen"
+  );
+  const estadoR = await bot("GET", `/api/bot/turnos?conversationId=${convR}`);
+  ok(estadoR.body?.reservas?.some((x) => x.id === reserva.body?.turno?.id), "el cerebro ve la reserva de mañana");
+  const cancelR = await bot("POST", `/api/bot/turnos/${reserva.body?.turno?.id}`, { conversationId: convR, action: "cancel" });
+  ok(cancelR.status === 200, "la reserva se puede cancelar");
 
   paso("una cita de hoy entra a la fila y avisa la demora");
   const hoy = (await tablero()) && (await api("GET", "/api/turnos/board")).body.day;
@@ -321,6 +363,7 @@ try {
   await api("POST", `/api/turnos/agendas/${agendaCitas.id}/close`);
   await api("PATCH", `/api/turnos/agendas/${agendaCitas.id}`, { ...CITAS, receivesBookings: false, active: false });
   await api("PATCH", `/api/turnos/agendas/${agenda.id}`, { ...AGENDA, active: false });
+  await api("PATCH", `/api/turnos/agendas/${agendaReservas.id}`, { ...RESERVAS, active: false });
   if (recibiaCitas) {
     const { id, organizationId: _o, createdAt: _c, updatedAt: _u, ...resto } = recibiaCitas;
     await api("PATCH", `/api/turnos/agendas/${id}`, { ...resto, receivesBookings: true });

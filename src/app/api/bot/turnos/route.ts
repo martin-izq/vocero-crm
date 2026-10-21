@@ -2,7 +2,8 @@ import { apiError, parseBody } from "@/lib/api";
 import { requireBotKey, resolveInstanceOrg } from "@/server/bot/auth";
 import { turnosDisabledResponse, turnosEnabled } from "@/server/turnos/flag";
 import { altaBotSchema, contactoDeConversacion } from "@/server/turnos/http";
-import { estadoParaContacto, sumarTurno } from "@/server/turnos/service";
+import { businessTimezone } from "@/server/analytics/period";
+import { estadoParaContacto, huecoPayload, sumarTurno } from "@/server/turnos/service";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +14,11 @@ export const dynamic = "force-dynamic";
  * contacto (código, cuántos antes, hora estimada, link). Los números los
  * calcula el CRM: el cerebro los repite, no los inventa.
  *
- * POST: sumar al contacto a la fila de una agenda. 201 con código y link;
- * 409 tipados: `ya_tiene_turno` (con su turno), `sin_fila`, `cerrada`,
- * `sin_lugar`, `agenda_inexistente`, `ai_paused`, `sandbox_violation`.
+ * POST: sumar al contacto a la fila de hoy de una agenda, o reservarle un
+ * horario (`startUtc`, de `GET /api/bot/turnos/huecos`; hoy u otro día). 201;
+ * 409 tipados: `ya_tiene_turno`, `sin_fila` (solo con reserva), `cerrada`,
+ * `sin_lugar`, `sin_reservas` (fila por número), `fuera_de_rango`,
+ * `hueco_ocupado` (con `huecos` frescos), `ai_paused`, `sandbox_violation`.
  */
 export async function GET(req: Request) {
   if (!turnosEnabled()) return turnosDisabledResponse();
@@ -58,16 +61,22 @@ export async function POST(req: Request) {
     actor: "agent",
     contactId: conv.contact.id,
     conversationId: body.data.conversationId,
+    reservaEn: body.data.startUtc ? new Date(body.data.startUtc) : null,
   });
   if (!r.ok) {
+    const tz = r.huecos ? await businessTimezone(organizationId) : null;
     return Response.json(
-      { error: { code: r.error, message: r.message } },
+      {
+        error: { code: r.error, message: r.message },
+        ...(r.huecos && tz ? { huecos: r.huecos.map((h) => huecoPayload(h, tz)) } : {}),
+      },
       { status: r.error === "agenda_inexistente" ? 404 : 409 }
     );
   }
   const estado = await estadoParaContacto(organizationId, conv.contact.id);
-  const turno = estado.turnos.find((t) => t.id === r.turn.id);
-  // `bienvenida`: el CRM le manda por este chat el número, la espera y el
-  // link. El cerebro confirma corto en vez de repetirlos.
-  return Response.json({ turno, now: estado.now, bienvenida: true }, { status: 201 });
+  const turno =
+    estado.turnos.find((t) => t.id === r.turn.id) ?? estado.reservas.find((t) => t.id === r.turn.id);
+  // `bienvenida: false`: el CRM no manda su propio mensaje de alta: lo
+  // confirma el cerebro, que es quien viene conversando.
+  return Response.json({ turno, now: estado.now, bienvenida: false }, { status: 201 });
 }

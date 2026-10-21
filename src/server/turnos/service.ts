@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import { asc, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
+import { asc, desc, eq, gt, gte, inArray, isNull, lt } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
@@ -7,9 +7,9 @@ import { getEnv } from "@/lib/env";
 import { addDaysISO, dayIsoInTz, zonedWallClockToUtc } from "@/lib/time/slots";
 import { avisosPendientes } from "@/lib/turnos/avisos";
 import { attentionOrder, estimateAgenda, type AgendaEstimate, type EstimateTurn } from "@/lib/turnos/estimate";
-import { codigo, horaLocal } from "@/lib/turnos/format";
+import { codigo, fechaLocal, horaLocal } from "@/lib/turnos/format";
 import { mainAction, type MainAction } from "@/lib/turnos/reception";
-import { nextFreeSlot } from "@/lib/turnos/slots";
+import { huecosLibres, nextFreeSlot } from "@/lib/turnos/slots";
 import { planTransition, staleMessage, type Actor, type TurnStatus } from "@/lib/turnos/transitions";
 import { markBookingStatus } from "@/server/agenda/service";
 import { businessTimezone } from "@/server/analytics/period";
@@ -261,11 +261,45 @@ function violacionUnica(err: unknown): string | null {
   return null;
 }
 
-export type ErrorAlta = "agenda_inexistente" | "sin_fila" | "cerrada" | "sin_lugar" | "ya_tiene_turno";
+export type ErrorAlta =
+  | "agenda_inexistente"
+  | "sin_fila"
+  | "cerrada"
+  | "sin_lugar"
+  | "ya_tiene_turno"
+  | "sin_reservas"
+  | "fuera_de_rango"
+  | "hueco_ocupado";
 
 export type Alta =
   | { ok: true; turn: TurnRow; code: string; link: string; peopleBefore: number; estimatedAt: Date | null }
-  | { ok: false; error: ErrorAlta; message: string; turn?: TurnRow };
+  | { ok: false; error: ErrorAlta; message: string; turn?: TurnRow; huecos?: Date[] };
+
+/** Mensajes en esta ventana = «ya vienen hablando»: no se vuelve a saludar. */
+const CHARLA_RECIENTE_MS = 2 * 60 * 60_000;
+/** Hasta cuántos días adelante se puede reservar un turno con horario. */
+export const DIAS_DE_RESERVA = 14;
+/** Margen para reservar hoy: no se ofrece un hueco que empieza ya. */
+const MARGEN_RESERVA_MS = 10 * 60_000;
+
+/**
+ * Los horarios libres de una agenda en un día (zona del negocio). Solo en las
+ * agendas que toman reservas (`gaps` o `none`); en una fila por número, ninguno.
+ */
+export async function huecosDeAgenda(organizationId: string, agendaId: string, day: string, now = new Date()) {
+  const agenda = await agendaPropia(organizationId, agendaId);
+  if (!agenda || !agenda.active || agenda.walkInMode === "queue") return [];
+  const tz = await businessTimezone(organizationId);
+  const hoy = hoyEn(tz, now);
+  if (day < hoy || day > addDaysISO(hoy, DIAS_DE_RESERVA)) return [];
+  const abre = zonedWallClockToUtc(day, agenda.opensAt, tz);
+  const cierra = zonedWallClockToUtc(day, agenda.closesAt, tz);
+  if (!abre || !cierra) return [];
+  const turns = await turnosDelDia(organizationId, [agenda.id], day);
+  const ocupados = turns.filter((t) => t.scheduledAt && ACTIVOS.includes(t.status)).map((t) => t.scheduledAt!);
+  const desde = day === hoy ? new Date(now.getTime() + MARGEN_RESERVA_MS) : abre;
+  return huecosLibres(ocupados, agenda.slotMinutes, abre, cierra, desde);
+}
 
 /**
  * Sumar a alguien a la fila de hoy. En `queue` toma el próximo número; en
@@ -282,6 +316,11 @@ export async function sumarTurno(input: {
   conversationId?: string | null;
   bookingId?: string | null;
   scheduledAt?: Date | null;
+  /**
+   * Reserva con horario: el instante elegido de `huecosDeAgenda` (hoy u otro
+   * día). Sin él, es «por orden de llegada» para hoy.
+   */
+  reservaEn?: Date | null;
   userId?: string | null;
   now?: Date;
 }): Promise<Alta> {
@@ -291,13 +330,39 @@ export async function sumarTurno(input: {
     return { ok: false, error: "agenda_inexistente", message: "Esa agenda no existe." };
   }
   const tz = await businessTimezone(input.organizationId);
-  const day = hoyEn(tz, now);
+  const hoy = hoyEn(tz, now);
   const esCita = input.source === "booking";
-  if (!esCita && agenda.walkInMode === "none") {
-    return { ok: false, error: "sin_fila", message: `${agenda.name} atiende solo con cita.` };
+  const reservaEn = input.reservaEn ?? null;
+  const day = reservaEn ? dayIsoInTz(reservaEn, tz) : hoy;
+
+  if (reservaEn) {
+    if (agenda.walkInMode === "queue") {
+      return {
+        ok: false,
+        error: "sin_reservas",
+        message: `${agenda.name} atiende por orden de llegada: no toma reservas con horario.`,
+      };
+    }
+    if (day < hoy || day > addDaysISO(hoy, DIAS_DE_RESERVA)) {
+      return {
+        ok: false,
+        error: "fuera_de_rango",
+        message: `Se puede reservar desde hoy hasta ${DIAS_DE_RESERVA} días adelante.`,
+      };
+    }
+    const libres = await huecosDeAgenda(input.organizationId, agenda.id, day, now);
+    if (!libres.some((h) => h.getTime() === reservaEn.getTime())) {
+      return { ok: false, error: "hueco_ocupado", message: "Ese horario no está libre.", huecos: libres };
+    }
+  } else if (!esCita && agenda.walkInMode === "none") {
+    return {
+      ok: false,
+      error: "sin_fila",
+      message: `${agenda.name} atiende solo con reserva: hay que elegir un horario.`,
+    };
   }
   const cierra = zonedWallClockToUtc(day, agenda.closesAt, tz);
-  if (!esCita && cierra && now >= cierra) {
+  if (!esCita && !reservaEn && cierra && now >= cierra) {
     return { ok: false, error: "cerrada", message: `${agenda.name} ya cerró por hoy.` };
   }
 
@@ -305,17 +370,17 @@ export async function sumarTurno(input: {
   if (input.contactId) {
     const ya = await turnoActivoDe(input.organizationId, input.contactId, agenda.id, day);
     if (ya) {
-      return { ok: false, error: "ya_tiene_turno", message: "Ya tenés un turno hoy en esta agenda.", turn: ya };
+      return { ok: false, error: "ya_tiene_turno", message: "Ya tenés un turno ese día en esta agenda.", turn: ya };
     }
   }
 
-  // ponytail: reintento sobre la clave (agenda, día, número); dos altas en
-  // carrera por el mismo hueco en `gaps` pueden compartirlo — si importa,
-  // una restricción de exclusión sobre el intervalo.
+  // Reintento sobre las claves (agenda, día, número) y (agenda, horario):
+  // dos altas sin turno en carrera por el mismo hueco en `gaps` hacen que la
+  // segunda tome el siguiente.
   for (let intento = 0; intento < 3; intento++) {
     const turns = await turnosDelDia(input.organizationId, [agenda.id], day);
-    let scheduledAt = input.scheduledAt ?? null;
-    if (!esCita && agenda.walkInMode === "gaps") {
+    let scheduledAt = input.scheduledAt ?? reservaEn;
+    if (!esCita && !reservaEn && agenda.walkInMode === "gaps") {
       const abre = zonedWallClockToUtc(day, agenda.opensAt, tz);
       const ocupados = turns
         .filter((t) => t.scheduledAt && ACTIVOS.includes(t.status))
@@ -358,17 +423,26 @@ export async function sumarTurno(input: {
       });
       const dia = armarDia(agenda, [...turns, turn!], now);
       const est = dia.estimate.turns.get(id);
+      // Lo sacó el cerebro en plena charla: la confirmación es suya, en un
+      // solo mensaje. Una bienvenida del CRM encima era el mismo dato dos
+      // veces, y con un «¡Hola!» a mitad de conversación.
+      if (input.source === "whatsapp") {
+        await db
+          .insert(schema.turnNotice)
+          .values({ id: newId("turnNotice"), organizationId: input.organizationId, turnId: id, kind: "alta", status: "sent", error: "lo_confirma_el_cerebro" })
+          .onConflictDoNothing();
+      }
       // Si ya entra dentro del «ya casi», ese aviso cuenta como dicho: quien
       // lo sumó (el agente o recepción) le acaba de dar estos mismos números,
       // y un «¿Estás viniendo?» en el mismo instante llegaba antes que esa
       // respuesta.
-      if (est && est.peopleBefore <= agenda.notifyBefore) {
+      if (day === hoy && est && est.peopleBefore <= agenda.notifyBefore) {
         await db
           .insert(schema.turnNotice)
           .values({ id: newId("turnNotice"), organizationId: input.organizationId, turnId: id, kind: "pronto", status: "sent", error: "al_sumarse" })
           .onConflictDoNothing();
       }
-      despuesDelCambio(input.organizationId, agenda.id);
+      despuesDelCambio(input.organizationId, agenda.id, day);
       return {
         ok: true,
         turn: turn!,
@@ -385,6 +459,14 @@ export async function sumarTurno(input: {
       }
       if (restriccion === "turn_booking_uq") {
         return { ok: false, error: "ya_tiene_turno", message: "Esa cita ya está en la fila." };
+      }
+      if (restriccion === "turn_agenda_horario_activo_uq" && reservaEn) {
+        return {
+          ok: false,
+          error: "hueco_ocupado",
+          message: "Ese horario se acaba de ocupar.",
+          huecos: await huecosDeAgenda(input.organizationId, agenda.id, day, now),
+        };
       }
       if (restriccion === null) throw err;
     }
@@ -695,9 +777,9 @@ async function ultimaConversacion(organizationId: string, contactId: string | nu
 /* Avisos                                                               */
 /* ------------------------------------------------------------------ */
 
-function despuesDelCambio(organizationId: string, agendaId: string) {
+function despuesDelCambio(organizationId: string, agendaId: string, day?: string) {
   publish(organizationId, { type: "turno.changed", data: { agendaId } });
-  void avisar(organizationId, agendaId).catch((err) =>
+  void avisar(organizationId, agendaId, new Date(), day).catch((err) =>
     console.error("[turnos] el avisador falló:", err)
   );
 }
@@ -713,11 +795,13 @@ function despuesDelCambio(organizationId: string, agendaId: string) {
  * Los avisos salen marcados como del asistente (`aiGenerated`): un aviso
  * automático no «contesta» lo que el paciente haya escrito (025).
  */
-export async function avisar(organizationId: string, agendaId: string, now = new Date()) {
+export async function avisar(organizationId: string, agendaId: string, now = new Date(), day?: string) {
   const agenda = await agendaPropia(organizationId, agendaId);
   if (!agenda) return;
   const tz = await businessTimezone(organizationId);
-  const turns = await turnosDelDia(organizationId, [agendaId], hoyEn(tz, now));
+  const hoy = hoyEn(tz, now);
+  // Otro día (una reserva a futuro): solo la bienvenida; lo demás, ese día.
+  const turns = await turnosDelDia(organizationId, [agendaId], day ?? hoy);
   if (turns.length === 0) return;
   const db = getDb();
   const ya = await db
@@ -726,20 +810,30 @@ export async function avisar(organizationId: string, agendaId: string, now = new
     .where(
       scoped(schema.turnNotice.organizationId, organizationId, inArray(schema.turnNotice.turnId, turns.map((t) => t.id)))
     );
-  const [org] = await db
-    .select({ name: schema.organization.name })
-    .from(schema.organization)
-    .where(eq(schema.organization.id, organizationId))
-    .limit(1);
+  // Donde se viene hablando hace poco, la bienvenida no saluda de nuevo.
+  const convs = [...new Set(turns.map((t) => t.conversationId).filter((c): c is string => c !== null))];
+  const recientes = convs.length
+    ? await db
+        .select({ id: schema.conversation.id })
+        .from(schema.conversation)
+        .where(
+          scoped(
+            schema.conversation.organizationId,
+            organizationId,
+            inArray(schema.conversation.id, convs),
+            gte(schema.conversation.lastMessageAt, new Date(now.getTime() - CHARLA_RECIENTE_MS))
+          )
+        )
+    : [];
 
   const avisos = avisosPendientes({
-    negocio: org?.name ?? "",
     agenda,
     turns,
     estimate: estimateAgenda(turns.map(paraEstimar), agenda.slotMinutes, now),
     timezone: tz,
     yaAvisados: new Set(ya.map((n) => `${n.turnId}|${n.kind}`)),
-    linkDe: linkDelTurno,
+    esHoy: (day ?? hoy) === hoy,
+    charlando: new Set(recientes.map((r) => r.id)),
   });
 
   for (const a of avisos) {
@@ -786,6 +880,9 @@ export async function estadoParaContacto(organizationId: string, contactId: stri
       id: d.agenda.id,
       name: d.agenda.name,
       walkIn: d.agenda.walkInMode !== "none",
+      /** Toma reservas con horario (hoy u otro día): ver `huecosDeAgenda`. */
+      reservas: d.agenda.walkInMode !== "queue",
+      slotMinutes: d.agenda.slotMinutes,
       peopleWaiting: enEspera,
       waitMinutes: Math.round(espera),
       opensAt: d.agenda.opensAt,
@@ -812,7 +909,37 @@ export async function estadoParaContacto(organizationId: string, contactId: stri
         };
       })
   );
-  return { timezone: t.timezone, now: horaLocal(now, t.timezone), agendas, turnos };
+  // Las reservas de otros días: el paciente pregunta «¿a qué hora era mi turno
+  // del jueves?» o quiere cancelarla.
+  const futuras = await getDb()
+    .select({ turn: schema.turn, agenda: schema.queueAgenda })
+    .from(schema.turn)
+    .innerJoin(schema.queueAgenda, eq(schema.queueAgenda.id, schema.turn.agendaId))
+    .where(
+      scoped(
+        schema.turn.organizationId,
+        organizationId,
+        eq(schema.turn.contactId, contactId),
+        gt(schema.turn.day, t.day),
+        inArray(schema.turn.status, ACTIVOS)
+      )
+    )
+    .orderBy(asc(schema.turn.scheduledAt));
+  const reservas = futuras.map(({ turn: x, agenda: a }) => ({
+    id: x.id,
+    agendaId: a.id,
+    agenda: a.name,
+    day: x.day,
+    dayLabel: x.scheduledAt ? fechaLocal(x.scheduledAt, t.timezone) : x.day,
+    time: x.scheduledAt ? horaLocal(x.scheduledAt, t.timezone) : null,
+    code: codigo(a.numberPrefix, x.number),
+  }));
+  return { timezone: t.timezone, now: horaLocal(now, t.timezone), today: t.day, agendas, turnos, reservas };
+}
+
+/** Un hueco reservable como lo ve el cerebro. */
+export function huecoPayload(h: Date, tz: string) {
+  return { startUtc: h.toISOString(), day: dayIsoInTz(h, tz), dayLabel: fechaLocal(h, tz), time: horaLocal(h, tz) };
 }
 
 /** Un turno de hoy de ESTE contacto, o null: el cerebro solo toca los suyos. */

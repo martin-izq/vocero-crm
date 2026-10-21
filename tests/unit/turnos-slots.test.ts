@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { nextFreeSlot } from "@/lib/turnos/slots";
+import { huecosLibres, nextFreeSlot } from "@/lib/turnos/slots";
 import { horaLocal } from "@/lib/turnos/format";
 import { dayIsoInTz, zonedWallClockToUtc } from "@/lib/time/slots";
 
@@ -37,4 +37,14 @@ test("before opening, starts at opening time", () => {
 
 test("null when the slot no longer fits before closing", () => {
   expect(nextFreeSlot([], 30, opens, closes, zonedDate("2026-10-05", "19:40", TZ))).toBeNull();
+});
+
+test("039 — huecosLibres: grilla desde la apertura, sin pisar turnos con horario, desde ahora", () => {
+  const abre = zonedDate("2026-10-05", "09:00", TZ);
+  const cierra = zonedDate("2026-10-05", "11:00", TZ);
+  const h = (hhmm: string) => zonedDate("2026-10-05", hhmm, TZ);
+  const libres = huecosLibres([h("09:20"), h("10:10")], 20, abre, cierra, h("09:05"));
+  // 09:00 ya pasó, 09:20 ocupado; 10:00 y 10:20 se pisan con el de 10:10–10:30.
+  expect(libres.map((d) => horaLocal(d, TZ))).toEqual(["09:40", "10:40"]);
+  expect(huecosLibres([], 30, abre, cierra, h("11:00"))).toEqual([]);
 });

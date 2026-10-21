@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "turn_agenda_horario_activo_uq" ON "turn" USING btree ("agenda_id","scheduled_at") WHERE "turn"."status" in ('waiting','called','in_service') and "turn"."scheduled_at" is not null;

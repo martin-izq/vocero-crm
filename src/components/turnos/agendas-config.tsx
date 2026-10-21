@@ -36,9 +36,9 @@ const VACIA: AgendaForm = {
 };
 
 const MODOS = {
-  queue: "Fila por número",
-  gaps: "Toma el próximo hueco",
-  none: "Solo con cita",
+  queue: "Solo por orden de llegada",
+  gaps: "Orden de llegada y reservas con horario",
+  none: "Solo con reserva (horario)",
 } as const;
 
 export function AgendasConfig({ onSaved }: { onSaved: () => void }) {
@@ -96,7 +96,7 @@ export function AgendasConfig({ onSaved }: { onSaved: () => void }) {
         <Campo id="ag-letra" label="Letra del número">
           <Input id="ag-letra" value={form.numberPrefix} maxLength={3} onChange={(e) => set("numberPrefix", e.target.value)} placeholder="A" />
         </Campo>
-        <Campo id="ag-modo" label="Gente sin turno">
+        <Campo id="ag-modo" label="Cómo atiende">
           <select
             id="ag-modo"
             className="h-9 w-full rounded-md border bg-background px-2 text-sm"
@@ -116,7 +116,7 @@ export function AgendasConfig({ onSaved }: { onSaved: () => void }) {
         <Campo id="ag-cierra" label="Cierra">
           <Input id="ag-cierra" type="time" value={form.closesAt} onChange={(e) => set("closesAt", e.target.value)} />
         </Campo>
-        <Campo id="ag-min" label="Minutos por persona">
+        <Campo id="ag-min" label="Minutos por turno">
           <Input id="ag-min" type="number" min={1} value={form.slotMinutes} onChange={(e) => set("slotMinutes", Number(e.target.value))} />
         </Campo>
         <Campo id="ag-aviso" label="Avisar «ya casi» con N antes">

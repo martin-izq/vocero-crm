@@ -21,3 +21,17 @@ export function horaLocal(at: Date, tz: string): string {
 export function codigo(prefijo: string, numero: number): string {
   return `${prefijo}-${numero}`;
 }
+
+/** "jueves 23/10" en la zona del negocio. */
+export function fechaLocal(at: Date, tz: string): string {
+  const p: Record<string, string> = {};
+  for (const x of new Intl.DateTimeFormat("es-AR", {
+    timeZone: tz,
+    weekday: "long",
+    day: "numeric",
+    month: "numeric",
+  }).formatToParts(at)) {
+    p[x.type] = x.value;
+  }
+  return `${p.weekday} ${p.day}/${p.month}`;
+}

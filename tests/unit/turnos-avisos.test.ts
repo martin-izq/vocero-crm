@@ -15,15 +15,14 @@ function turno(n: number, extra: Partial<AvisoTurno> = {}): AvisoTurno & { start
 }
 
 /** Por defecto la bienvenida ya salió: los demás casos miran lo que sigue. */
-function avisos(turns: ReturnType<typeof turno>[], ya: string[] = [], { conAlta = true } = {}) {
+function avisos(turns: ReturnType<typeof turno>[], ya: string[] = [], { conAlta = true, esHoy = true } = {}) {
   return avisosPendientes({
-    negocio: "Centro Norte",
     agenda,
     turns,
     estimate: estimateAgenda(turns, 15, NOW),
     timezone: TZ,
     yaAvisados: new Set([...ya, ...(conAlta ? turns.map((t) => `${t.id}|alta`) : [])]),
-    linkDe: (id) => `https://crm.test/t/${id}`,
+    esHoy,
   });
 }
 
@@ -37,18 +36,38 @@ describe("avisos de turnos", () => {
     expect(a[0]!.buttons?.map((b) => b.id)).toEqual(["turno:si:t1", "turno:no:t1"]);
   });
 
-  it("el primer mensaje es una bienvenida con el negocio, el número, la espera y el link; nada más en esa pasada", () => {
+  it("el primer mensaje es una bienvenida con el número y la espera, sin prefijo ni link; nada más en esa pasada", () => {
     const a = avisos([turno(1), turno(2), turno(3)], [], { conAlta: false });
     expect(a.map((x) => `${x.turnId}:${x.kind}`)).toEqual(["t1:alta", "t2:alta", "t3:alta"]);
-    expect(a[0]!.text).toMatch(/^Centro Norte: ¡hola! Te anotamos para hoy en Clínica general\. Tu número es el A-1\. Sos el próximo/);
+    expect(a[0]!.text).toMatch(/^¡Hola! Te anoté en la fila de hoy de Clínica general\. Tu número es el A-1\. Sos el próximo/);
     expect(a[1]!.text).toContain("Hay 1 persona antes que vos");
     expect(a[2]!.text).toContain("Hay 2 personas antes que vos");
-    expect(a[0]!.text).toContain("Seguilo en vivo: https://crm.test/t/t1");
+    expect(a.every((x) => !x.text.includes("http"))).toBe(true);
   });
 
-  it("la bienvenida de una cita nombra su hora", () => {
-    const [a] = avisos([turno(1, { scheduledAt: at(30) })], [], { conAlta: false });
-    expect(a!.text).toContain("Tu cita de las 15:30 en Clínica general ya está en la fila de hoy, con el número A-1");
+  it("una reserva dice «te reservé», no «cita»; una de la agenda de Citas, «tu cita»", () => {
+    const [reserva] = avisos([turno(1, { scheduledAt: at(30), source: "whatsapp" })], [], { conAlta: false });
+    expect(reserva!.text).toContain("Te reservé el turno de hoy a las 15:30 (Clínica general). Tu número es el A-1");
+    expect(reserva!.text).not.toContain("cita");
+    const [cita] = avisos([turno(1, { scheduledAt: at(30), source: "booking" })], [], { conAlta: false });
+    expect(cita!.text).toContain("Tu cita de hoy a las 15:30 (Clínica general) ya está en la fila");
+  });
+
+  it("donde ya se viene hablando, la bienvenida no saluda de nuevo", () => {
+    const turns = [turno(1, { scheduledAt: at(30), source: "booking" })];
+    const [a] = avisosPendientes({
+      agenda, turns, estimate: estimateAgenda(turns, 15, NOW), timezone: TZ,
+      yaAvisados: new Set(), charlando: new Set(["cv1"]),
+    });
+    expect(a!.text).toMatch(/^Tu cita de hoy a las 15:30/);
+  });
+
+  it("una reserva de otro día: solo la bienvenida, con el día, y nada más hasta ese día", () => {
+    const otroDia = new Date("2026-10-23T13:00:00Z");
+    const t = turno(1, { scheduledAt: otroDia, source: "whatsapp" });
+    const [a] = avisos([t], [], { conAlta: false, esHoy: false });
+    expect(a!.text).toContain("Te reservé el turno del viernes 23/10 a las 10:00 (Clínica general)");
+    expect(avisos([t], [], { esHoy: false })).toEqual([]);
   });
 
   it("lo ya avisado no se repite; sin conversación no se avisa", () => {

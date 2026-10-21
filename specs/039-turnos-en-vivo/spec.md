@@ -39,7 +39,22 @@ número compartido del PLAN-MVP del POC quedan afuera.
    actualizan solos por un SSE público que solo dice «cambió algo», y cada página
    vuelve a pedir su propio estado. Si el canal se cae, consultan cada 20 s. La
    sala muestra solo códigos.
-7. **Citas del día**: con `AGENDA=on`, las citas de hoy entran como turnos con
+7. **Reservas con horario por agenda**: cada agenda de Turnos atiende «solo
+   por orden de llegada» (`queue`), «orden de llegada y reservas» (`gaps`) o
+   «solo con reserva» (`none`), con sus propios horarios y minutos por turno.
+   Nea consulta `GET /api/bot/turnos/huecos` (`queue_slots`) y reserva con
+   `startUtc` (`join_queue`), hoy o hasta 14 días adelante. Solo se puede
+   reservar un hueco que salió de ahí; dos reservas del mismo horario no ganan
+   las dos (índice único en la base).
+   - Esto reemplaza, para turnos, a la agenda de Citas de Vocero: esa es una
+     sola por negocio.
+   - Conviene apagar «Agendar citas» en Agente si se usan reservas de Turnos.
+8. **Mensajes**: sin el nombre del negocio delante y sin link.
+   - Si el turno lo saca el cerebro en la charla, la confirmación es solo suya
+     (`bienvenida: false`) y no vuelve a saludar.
+   - Si el turno nace fuera de la charla (una cita), el CRM manda la
+     bienvenida, sin «¡Hola!» si hubo mensajes en las últimas 2 horas.
+9. **Citas del día**: con `AGENDA=on`, las citas de hoy entran como turnos con
    horario a la agenda marcada «recibe las citas». Atendido marca la cita
    `realizada`; ausente, `no_show`; una cita cancelada saca su turno de la fila.
 

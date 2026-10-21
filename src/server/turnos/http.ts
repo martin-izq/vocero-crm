@@ -38,6 +38,8 @@ export const altaBotSchema = z.object({
   agendaId: z.string().min(1),
   /** Nombre a mostrar; sin él, el del contacto. */
   name: z.string().trim().max(80).optional(),
+  /** Reserva con horario: un `startUtc` de `GET /api/bot/turnos/huecos`. */
+  startUtc: z.string().datetime({ offset: true }).optional(),
 });
 
 export const accionBotSchema = z.object({

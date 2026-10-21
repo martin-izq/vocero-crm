@@ -12,7 +12,7 @@
     "/api/bot/turnos": {
       "get": {
         "summary": "Turnos en vivo: agendas de hoy y los turnos del contacto",
-        "description": "039 — Con la bandera TURNOS (si no, 404). Las agendas activas con cuánta gente espera y la espera estimada AHORA, y los turnos activos de hoy del contacto de la conversación. Los números los calcula el CRM: el cerebro los repite, no los inventa.",
+        "description": "039 — Con la bandera TURNOS (si no, 404). Las agendas activas con cuánta gente espera y la espera estimada AHORA, y los turnos activos de hoy del contacto de la conversación. Los números los calcula el CRM: el cerebro los repite, no los inventa. Cada agenda dice si toma reservas con horario (`reservas`) y si atiende sin turno (`walkIn`); `reservas` del contacto lista sus turnos reservados de otros días.",
         "parameters": [{"name": "conversationId", "in": "query", "required": true, "schema": {"type": "string"}}],
         "responses": {
           "200": {"description": "Estado de hoy", "content": {"application/json": {"schema": {"type": "object", "properties": {"timezone": {"type": "string"}, "now": {"type": "string", "description": "HH:MM en la zona del negocio"}, "agendas": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "walkIn": {"type": "boolean", "description": "false: solo con cita"}, "peopleWaiting": {"type": "integer"}, "waitMinutes": {"type": "integer"}, "opensAt": {"type": "string"}, "closesAt": {"type": "string"}}}}, "turnos": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "agendaId": {"type": "string"}, "agenda": {"type": "string"}, "room": {"type": "string"}, "code": {"type": "string", "examples": ["A-27"]}, "status": {"enum": ["waiting", "called", "in_service"]}, "scheduledAt": {"type": ["string", "null"], "description": "Hora de la cita en la zona del negocio (HH:MM), o null en la fila por número"}, "peopleBefore": {"type": "integer"}, "estimatedAt": {"type": ["string", "null"], "description": "Hora estimada de atención (HH:MM, zona del negocio)"}, "confirmed": {"type": "boolean"}, "link": {"type": "string", "description": "Link en vivo del turno, para mandarle al paciente"}}}}}}}}},
@@ -21,14 +21,27 @@
         }
       },
       "post": {
-        "summary": "Sumar al contacto a la fila de hoy de una agenda",
-        "description": "039 — Un turno activo por agenda por día para cada contacto. La conversación debe tener la IA activa y no ser del Laboratorio.",
-        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["conversationId", "agendaId"], "properties": {"conversationId": {"type": "string"}, "agendaId": {"type": "string"}, "name": {"type": "string", "description": "Nombre a mostrar; sin él, el del contacto"}}}}}},
+        "summary": "Sacar turno para hoy, o reservar un horario (hoy u otro día)",
+        "description": "039 — Sin `startUtc`: a la fila de hoy (por orden de llegada; en una agenda «en huecos», el próximo hueco libre). Con `startUtc` (uno de `GET /api/bot/turnos/huecos`): reserva ese horario, en una agenda que toma reservas. Un turno activo por agenda por día para cada contacto. La conversación debe tener la IA activa y no ser del Laboratorio.",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["conversationId", "agendaId"], "properties": {"conversationId": {"type": "string"}, "agendaId": {"type": "string"}, "name": {"type": "string", "description": "Nombre a mostrar; sin él, el del contacto"}, "startUtc": {"type": "string", "format": "date-time", "description": "Reserva con horario: el `startUtc` exacto de un hueco de `GET /api/bot/turnos/huecos`"}}}}}},
         "responses": {
-          "201": {"description": "Turno creado. `bienvenida: true`: el CRM le manda al paciente, por este chat, su número, cuántos hay antes, la hora y el link; el cerebro no los repite", "content": {"application/json": {"schema": {"type": "object", "properties": {"bienvenida": {"type": "boolean"}, "turno": {"type": "object", "properties": {"id": {"type": "string"}, "agendaId": {"type": "string"}, "agenda": {"type": "string"}, "room": {"type": "string"}, "code": {"type": "string", "examples": ["A-27"]}, "status": {"enum": ["waiting", "called", "in_service"]}, "scheduledAt": {"type": ["string", "null"], "description": "Hora de la cita en la zona del negocio (HH:MM), o null en la fila por número"}, "peopleBefore": {"type": "integer"}, "estimatedAt": {"type": ["string", "null"], "description": "Hora estimada de atención (HH:MM, zona del negocio)"}, "confirmed": {"type": "boolean"}, "link": {"type": "string", "description": "Link en vivo del turno, para mandarle al paciente"}}}, "now": {"type": "string"}}}}}},
+          "201": {"description": "Turno creado. `bienvenida`: si es true, el CRM ya le mandó al paciente el detalle del turno y el cerebro no lo repite; false (lo de siempre por esta ruta): lo confirma el cerebro, con los datos de `turno`", "content": {"application/json": {"schema": {"type": "object", "properties": {"bienvenida": {"type": "boolean"}, "turno": {"type": "object", "properties": {"id": {"type": "string"}, "agendaId": {"type": "string"}, "agenda": {"type": "string"}, "room": {"type": "string"}, "code": {"type": "string", "examples": ["A-27"]}, "status": {"enum": ["waiting", "called", "in_service"]}, "scheduledAt": {"type": ["string", "null"], "description": "Hora de la cita en la zona del negocio (HH:MM), o null en la fila por número"}, "peopleBefore": {"type": "integer"}, "estimatedAt": {"type": ["string", "null"], "description": "Hora estimada de atención (HH:MM, zona del negocio)"}, "confirmed": {"type": "boolean"}, "link": {"type": "string", "description": "Link en vivo del turno, para mandarle al paciente"}}}, "now": {"type": "string"}}}}}},
           "404": {"description": "`not_found` (conversación) o `agenda_inexistente`", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
-          "409": {"description": "`ya_tiene_turno`, `sin_fila` (solo con cita), `cerrada`, `sin_lugar`, `ai_paused`, `sandbox_violation`", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "409": {"description": "`ya_tiene_turno`, `sin_fila` (la agenda atiende solo con reserva), `cerrada`, `sin_lugar`, `sin_reservas` (fila por número: no toma horario), `fuera_de_rango`, `hueco_ocupado` (trae `huecos` frescos), `ai_paused`, `sandbox_violation`", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
           "422": {"description": "Cuerpo inválido", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/api/bot/turnos/huecos": {
+      "get": {
+        "summary": "Horarios libres para reservar un turno con una agenda",
+        "description": "039 — Solo en agendas que toman reservas. Con `date` (AAAA-MM-DD, zona del negocio), todos los de ese día; sin ella, unos cuantos de los próximos días. Lo reservable es solo lo que sale de acá.",
+        "parameters": [{"name": "conversationId", "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "agendaId", "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "date", "in": "query", "required": false, "schema": {"type": "string"}}],
+        "responses": {
+          "200": {"description": "Huecos", "content": {"application/json": {"schema": {"type": "object", "properties": {"agenda": {"type": "object"}, "date": {"type": ["string", "null"]}, "huecos": {"type": "array", "items": {"type": "object", "properties": {"startUtc": {"type": "string", "format": "date-time"}, "day": {"type": "string"}, "dayLabel": {"type": "string", "examples": ["jueves 23/10"]}, "time": {"type": "string", "examples": ["10:00"]}}}}}}}}},
+          "404": {"description": "`not_found` (conversación) o `agenda_inexistente`"},
+          "409": {"description": "`sin_reservas`: la agenda atiende por orden de llegada"},
+          "422": {"description": "Faltan conversationId o agendaId, o date mal formada"}
         }
       }
     },

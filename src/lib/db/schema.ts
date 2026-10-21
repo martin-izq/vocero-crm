@@ -1376,6 +1376,13 @@ export const turn = pgTable(
       .on(t.agendaId, t.day, t.contactId)
       .where(sql`${t.status} in ('waiting','called','in_service') and ${t.contactId} is not null`),
     index("turn_org_day_idx").on(t.organizationId, t.day),
+    /**
+     * Una reserva por horario y agenda, garantizado por la base: dos pacientes
+     * que eligen el mismo hueco a la vez no ganan los dos.
+     */
+    uniqueIndex("turn_agenda_horario_activo_uq")
+      .on(t.agendaId, t.scheduledAt)
+      .where(sql`${t.status} in ('waiting','called','in_service') and ${t.scheduledAt} is not null`),
   ]
 );
 
