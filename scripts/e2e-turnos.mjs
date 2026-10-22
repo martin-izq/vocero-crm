@@ -325,6 +325,20 @@ try {
   const cancelR = await bot("POST", `/api/bot/turnos/${reserva.body?.turno?.id}`, { conversationId: convR, action: "cancel" });
   ok(cancelR.status === 200, "la reserva se puede cancelar");
 
+  paso("eliminar una agenda: no con turnos pendientes");
+  const vieja = (await api("GET", "/api/turnos/agendas")).body.agendas.find((a) => a.numberPrefix === "W");
+  if (vieja) await api("DELETE", `/api/turnos/agendas/${vieja.id}`);
+  const temporal = (await api("POST", "/api/turnos/agendas", { ...AGENDA, name: "E2E Borrable", numberPrefix: "W" })).body.agenda;
+  const pendiente = await api("POST", "/api/turnos/turns", { agendaId: temporal.id, displayName: "Pendiente" });
+  ok((await api("DELETE", `/api/turnos/agendas/${temporal.id}`)).status === 409, "con un turno pendiente → 409");
+  await accion(pendiente.body?.id, "waiting", "cancelled");
+  ok((await api("DELETE", `/api/turnos/agendas/${temporal.id}`)).status === 204, "sin pendientes → 204");
+  ok(
+    !(await api("GET", "/api/turnos/agendas")).body.agendas.some((a) => a.id === temporal.id),
+    "ya no aparece en la lista"
+  );
+  ok((await api("DELETE", `/api/turnos/agendas/${temporal.id}`)).status === 404, "borrarla de nuevo → 404");
+
   paso("una cita de hoy entra a la fila y avisa la demora");
   const hoy = (await tablero()) && (await api("GET", "/api/turnos/board")).body.day;
   const libres = (await api("GET", `/api/calendar/availability?from=${hoy}&to=${hoy}`)).body?.slots ?? [];

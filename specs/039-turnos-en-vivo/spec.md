@@ -74,6 +74,15 @@ número compartido del PLAN-MVP del POC quedan afuera.
       cierra el día en sus agendas.
     - No ve la Bandeja, los contactos ni Ajustes.
     - Por el SSE solo le llega `turno.changed`.
+12. **Eliminar una agenda** (`DELETE /api/turnos/agendas/:id`, quien
+    configura): borra la agenda con su historial y sus operarios asignados.
+    Con turnos pendientes de hoy en adelante responde 409: hay que
+    cancelarlos o apagar la agenda.
+13. **Datos de demo**: `pnpm seed:turnos` crea cinco agendas (letras M, P, K,
+    L, F: una por modo, una cerrada a esta hora y una apagada) con
+    historial, la fila de hoy armada alrededor de la hora actual y reservas
+    para la semana. Re-ejecutable: solo recrea esas letras. Los turnos no
+    tienen conversación, así que no se avisa a nadie.
 
 ## Decisiones
 

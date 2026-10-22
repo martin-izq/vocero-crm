@@ -42,7 +42,7 @@ const ACTIVOS: TurnStatus[] = ["waiting", "called", "in_service"];
  * sortearse: así se puede volver a mandar el link («¿me pasás el link?») sin
  * guardarlo en claro. En la base queda solo su SHA-256, como en el POC.
  */
-function tokenDe(turnId: string): string {
+export function tokenDe(turnId: string): string {
   const firma = createHmac("sha256", getEnv().ENCRYPTION_KEY)
     .update(`turnos:link:${turnId}`)
     .digest("base64url")
@@ -854,6 +854,47 @@ export async function guardarAgenda(
     }
     throw err;
   }
+}
+
+/**
+ * Borra una agenda con su historial (turnos, eventos, avisos y operarios
+ * asignados, en cascada). Con turnos pendientes de hoy en adelante no se
+ * borra: a esas personas ya se les dio un número o un horario.
+ */
+export async function borrarAgenda(
+  organizationId: string,
+  agendaId: string,
+  now = new Date()
+): Promise<{ ok: true } | { ok: false; error: "inexistente" | "con_turnos"; message: string }> {
+  const db = getDb();
+  const hoy = hoyEn(await businessTimezone(organizationId), now);
+  const pendientes = await db
+    .select({ id: schema.turn.id })
+    .from(schema.turn)
+    .where(
+      scoped(
+        schema.turn.organizationId,
+        organizationId,
+        eq(schema.turn.agendaId, agendaId),
+        inArray(schema.turn.status, ACTIVOS),
+        gte(schema.turn.day, hoy)
+      )
+    );
+  if (pendientes.length > 0) {
+    const n = pendientes.length;
+    return {
+      ok: false,
+      error: "con_turnos",
+      message: `Tiene ${n} ${n === 1 ? "turno pendiente" : "turnos pendientes"}: cancelalos o apagá la agenda.`,
+    };
+  }
+  const borradas = await db
+    .delete(schema.queueAgenda)
+    .where(scoped(schema.queueAgenda.organizationId, organizationId, eq(schema.queueAgenda.id, agendaId)))
+    .returning({ id: schema.queueAgenda.id });
+  if (borradas.length === 0) return { ok: false, error: "inexistente", message: "Esa agenda no existe." };
+  publish(organizationId, { type: "turno.changed", data: { agendaId } });
+  return { ok: true };
 }
 
 /* ------------------------------------------------------------------ */

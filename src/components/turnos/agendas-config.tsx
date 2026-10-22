@@ -70,6 +70,20 @@ export function AgendasConfig({ citas = false, onSaved }: { citas?: boolean; onS
     onSaved();
   }
 
+  async function borrar() {
+    if (!form.id || !confirm(`¿Eliminar la agenda ${form.name}? Se borra también su historial de turnos.`)) return;
+    setError(null);
+    const res = await fetch(`/api/turnos/agendas/${form.id}`, { method: "DELETE" }).catch(() => null);
+    if (!res?.ok) {
+      const b = (await res?.json().catch(() => null)) as { error?: { message?: string } } | null;
+      setError(b?.error?.message ?? "No se pudo eliminar.");
+      return;
+    }
+    setForm(VACIA);
+    void cargar();
+    onSaved();
+  }
+
   const set = <K extends keyof AgendaForm>(k: K, v: AgendaForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
@@ -138,6 +152,11 @@ export function AgendasConfig({ citas = false, onSaved }: { citas?: boolean; onS
         <Button size="sm" onClick={() => void guardar()} disabled={!form.name.trim() || !form.numberPrefix.trim()}>
           {form.id ? "Guardar agenda" : "Crear agenda"}
         </Button>
+        {form.id && (
+          <Button size="sm" variant="ghost" className="text-danger-text" onClick={() => void borrar()}>
+            Eliminar agenda
+          </Button>
+        )}
         {error && <span className="text-danger-text">{error}</span>}
       </div>
     </Card>
