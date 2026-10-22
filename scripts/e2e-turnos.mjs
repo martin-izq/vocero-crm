@@ -324,7 +324,7 @@ try {
   const semana = await api("GET", `/api/turnos/reservas?desde=${manana}`);
   ok(
     semana.body?.turns?.some((t) => t.id === reserva.body?.turno?.id && t.day === manana),
-    "la pestaña «Agenda» muestra la reserva de mañana"
+    "la pestaña «Calendario» muestra la reserva de mañana"
   );
   const estadoR = await bot("GET", `/api/bot/turnos?conversationId=${convR}`);
   ok(estadoR.body?.reservas?.some((x) => x.id === reserva.body?.turno?.id), "el cerebro ve la reserva de mañana");
@@ -420,7 +420,7 @@ try {
     const pagina = await op("GET", "/inbox");
     ok(pagina.status === 307 && pagina.location?.endsWith("/turnos"), `la página /inbox lo manda a /turnos (${pagina.status})`);
     const semanaOp = await op("GET", "/api/turnos/reservas");
-    ok(semanaOp.body?.agendas?.every((a) => a.id === agenda.id), "su «Agenda» trae solo su agenda");
+    ok(semanaOp.body?.agendas?.every((a) => a.id === agenda.id), "su «Calendario» trae solo su agenda");
     ok(
       (await op("POST", "/api/turnos/turns", { agendaId: agendaCitas.id, displayName: "Ajeno" })).status === 403,
       "no suma gente a una agenda ajena"
@@ -435,6 +435,20 @@ try {
     const propio = await api("POST", "/api/turnos/turns", { agendaId: agenda.id, displayName: "Propio" });
     const llamar = await op("POST", `/api/turnos/turns/${propio.body?.id}`, { expected: "waiting", to: "called" });
     ok(llamar.status === 200, "llama a un turno de su agenda");
+
+    paso("Agendas: quién atiende cada agenda, desde la agenda");
+    const conOps = await api("GET", "/api/turnos/agendas");
+    const opUser = conOps.body?.operarios?.find((o) => o.email === opEmail);
+    ok(Boolean(opUser), "la lista de agendas trae los operarios");
+    ok(conOps.body.agendas.find((a) => a.id === agenda.id)?.operatorIds?.includes(opUser?.userId), "la agenda dice quién la atiende");
+    const asignar = (userIds) => api("PUT", `/api/turnos/agendas/${agendaCitas.id}/operators`, { userIds });
+    ok((await asignar([opUser?.userId])).status === 204, "asignarle otra agenda desde la agenda → 204");
+    ok((await op("GET", "/api/turnos/board")).body?.agendas?.length === 2, "el operario ya ve las dos");
+    await asignar([]);
+    ok((await op("GET", "/api/turnos/board")).body?.agendas?.length === 1, "sacarlo la quita de su tablero");
+    ok((await op("PUT", `/api/turnos/agendas/${agenda.id}/operators`, { userIds: [] })).status === 403, "el operario no cambia asignaciones");
+    const paginaAgendas = await op("GET", "/agendas");
+    ok(paginaAgendas.status === 307 && paginaAgendas.location?.endsWith("/turnos"), `la página /agendas lo manda a /turnos (${paginaAgendas.status})`);
     const opId = (await api("GET", "/api/settings/team")).body?.members?.find((m) => m.email === opEmail)?.id;
     await api("PATCH", `/api/settings/team/${opId}`, { role: "member", agendaIds: [] });
   }

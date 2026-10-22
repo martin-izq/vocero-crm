@@ -1,4 +1,4 @@
-// La rejilla de horas de la pestaña «Agenda»: qué franja mostrar, qué huecos
+// La rejilla de horas de la pestaña «Calendario»: qué franja mostrar, qué huecos
 // quedan libres y cuánto falta. Pura, en minutos del día del negocio.
 
 export type Franja = { startMin: number; endMin: number };

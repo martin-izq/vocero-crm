@@ -17,6 +17,13 @@ describe("039 — rol operario", () => {
     expect(canConfigure("operator")).toBe(false);
   });
 
+  it("Agendas aparece detrás de Turnos solo para quien configura", () => {
+    const items = (role: string) => appNavGroups({ turnos: true, role })[0]!.items.map((x) => x.href);
+    expect(items("owner").slice(-2)).toEqual(["/turnos", "/agendas"]);
+    expect(items("member")).not.toContain("/agendas");
+    expect(appNavGroups({ turnos: false, role: "owner" })[0]!.items.map((x) => x.href)).not.toContain("/agendas");
+  });
+
   it("el menú del operario es solo Turnos", () => {
     const groups = appNavGroups({ agenda: true, turnos: true, role: "operator" });
     expect(groups.flatMap((g) => g.items.map((i) => i.href))).toEqual(["/turnos"]);

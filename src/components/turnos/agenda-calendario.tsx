@@ -13,7 +13,7 @@ import type { VistaReservas } from "@/server/turnos/service";
 import { colorDeAgenda } from "./color";
 
 /**
- * 039 — Pestaña «Agenda»: la rejilla de horas de Turnos, como Google Calendar.
+ * 039 — Pestaña «Calendario»: la rejilla de horas de Turnos, como Google Calendar.
  *
  * - Semana: una columna por día; Día: una columna por agenda (cada médico con
  *   su horario sombreado y sus huecos libres).
@@ -653,7 +653,7 @@ export function FiltroEspecialidad({
   onChange: (v: string | null) => void;
 }) {
   return (
-    <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="group" aria-label="Especialidad">
+    <div className="-mx-1 flex shrink-0 gap-1.5 overflow-x-auto px-1 pb-1" role="group" aria-label="Especialidad">
       {[null, ...opciones].map((e) => (
         <button
           key={e ?? ""}

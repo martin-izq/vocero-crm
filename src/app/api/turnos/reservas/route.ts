@@ -8,7 +8,7 @@ import { alcanceDe, DIAS_DE_AGENDA, hoyEn, reservas } from "@/server/turnos/serv
 export const dynamic = "force-dynamic";
 
 /**
- * 039 — La pestaña «Agenda»: los turnos con horario de una semana
+ * 039 — La pestaña «Calendario»: los turnos con horario de una semana
  * (`?desde=AAAA-MM-DD`, por defecto el lunes de esta semana). El operario ve
  * solo sus agendas.
  */

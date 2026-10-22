@@ -57,7 +57,7 @@ número compartido del PLAN-MVP del POC quedan afuera.
 9. **Citas del día**: con `AGENDA=on`, las citas de hoy entran como turnos con
    horario a la agenda marcada «recibe las citas». Atendido marca la cita
    `realizada`; ausente, `no_show`; una cita cancelada saca su turno de la fila.
-10. **Agenda**: la pestaña «Agenda» de Turnos es una rejilla de horas, como
+10. **Calendario**: la pestaña «Calendario» de Turnos es una rejilla de horas, como
     Google Calendar (`GET /api/turnos/reservas?desde=`, una semana).
     - Semana: una columna por día. Día: una columna por agenda, con su
       horario sombreado y sus huecos libres.
@@ -69,7 +69,7 @@ número compartido del PLAN-MVP del POC quedan afuera.
       llamado en grande y un destello cuando cambia.
 11. **Operario** (rol `operator`, el médico): el propietario lo crea o lo
     cambia en Ajustes → Equipo y elige sus agendas (`agenda_operator`).
-    - Ve solo Turnos, y dentro solo sus agendas: «Hoy» y «Agenda».
+    - Ve solo Turnos, y dentro solo sus agendas: «Hoy» y «Calendario».
     - Llama al siguiente, comienza, termina, marca ausente, suma gente y
       cierra el día en sus agendas.
     - No ve la Bandeja, los contactos ni Ajustes.
@@ -95,6 +95,14 @@ número compartido del PLAN-MVP del POC quedan afuera.
       espera o su primer horario; si le da igual, toma el que lo atiende antes.
     - No hay tabla de médicos: el nombre de la agenda es el médico (decisión
       de Martin, 2026-10-22).
+
+15. **Módulo Agendas** (`/agendas`, en la barra lateral debajo de Turnos,
+    solo para quien configura): la lista de agendas agrupada por
+    especialidad, con las apagadas al final y un interruptor para prender o
+    apagar cada una. Al tocar una se abre su ficha: el formulario, quién la
+    atiende (los operarios, lo mismo que Ajustes → Equipo visto desde la
+    agenda; `PUT /api/turnos/agendas/:id/operators`) y Eliminar. Turnos
+    queda solo para operar: «Hoy» y «Calendario».
 
 ## Decisiones
 

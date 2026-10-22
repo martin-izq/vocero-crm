@@ -4,7 +4,7 @@ import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import { getEnv } from "@/lib/env";
-import { esOperario } from "@/lib/auth/roles";
+import { esOperario, OPERARIO } from "@/lib/auth/roles";
 import { addDaysISO, dayIsoInTz, zonedWallClockToUtc } from "@/lib/time/slots";
 import { avisosPendientes } from "@/lib/turnos/avisos";
 import { attentionOrder, estimateAgenda, type AgendaEstimate, type EstimateTurn } from "@/lib/turnos/estimate";
@@ -163,6 +163,36 @@ export async function asignarAgendas(organizationId: string, userId: string, age
   }
 }
 
+/** Las cuentas con rol operario del negocio, para elegir quién atiende una agenda. */
+export async function operariosDelNegocio(organizationId: string) {
+  return getDb()
+    .select({ userId: schema.member.userId, name: schema.user.name, email: schema.user.email })
+    .from(schema.member)
+    .innerJoin(schema.user, eq(schema.user.id, schema.member.userId))
+    .where(scoped(schema.member.organizationId, organizationId, eq(schema.member.role, OPERARIO)))
+    .orderBy(asc(schema.user.name));
+}
+
+/**
+ * Reemplaza quién atiende una agenda (lo mismo que Equipo, visto desde la
+ * agenda). Ignora cuentas que no son operarios de este negocio.
+ */
+export async function asignarOperarios(organizationId: string, agendaId: string, userIds: string[]) {
+  if (!(await agendaPropia(organizationId, agendaId))) return false;
+  const validos = new Set((await operariosDelNegocio(organizationId)).map((o) => o.userId));
+  const db = getDb();
+  await db
+    .delete(schema.agendaOperator)
+    .where(scoped(schema.agendaOperator.organizationId, organizationId, eq(schema.agendaOperator.agendaId, agendaId)));
+  const ids = [...new Set(userIds)].filter((id) => validos.has(id));
+  if (ids.length > 0) {
+    await db
+      .insert(schema.agendaOperator)
+      .values(ids.map((userId) => ({ id: newId("agendaOperator"), organizationId, userId, agendaId })));
+  }
+  return true;
+}
+
 export type DiaDeAgenda = {
   agenda: AgendaRow;
   turns: TurnRow[];
@@ -244,11 +274,11 @@ export function vistaTablero(t: Awaited<ReturnType<typeof tablero>>) {
 
 export type VistaTablero = ReturnType<typeof vistaTablero>;
 
-/** Tope de días de la vista «Agenda». */
+/** Tope de días de la vista «Calendario». */
 export const DIAS_DE_AGENDA = 7;
 
 /**
- * La pestaña «Agenda»: los turnos de `dias` días desde `desde`, de las agendas
+ * La pestaña «Calendario»: los turnos de `dias` días desde `desde`, de las agendas
  * activas del alcance, listos para una rejilla de horas. Sin los cancelados:
  * un hueco liberado se ve libre.
  *

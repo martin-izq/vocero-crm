@@ -1,4 +1,5 @@
 import {
+  CalendarCog,
   CalendarDays,
   ClipboardList,
   ChartColumn,
@@ -73,6 +74,8 @@ export function appNavGroups({
   // sección aparte.
   if (agenda) trabajo.push({ href: "/bookings", label: "Citas", icon: CalendarDays });
   if (turnos) trabajo.push({ href: "/turnos", label: "Turnos", icon: ClipboardList });
+  // 039 — Configurar las agendas (médicos, horarios) no es la operación del día.
+  if (turnos && canConfigure(role)) trabajo.push({ href: "/agendas", label: "Agendas", icon: CalendarCog });
 
   const agente: NavItem[] = [];
   // Un miembro del equipo no puede hacer ninguno de los pasos de la guía.

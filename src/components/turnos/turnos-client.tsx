@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, MessageCircle, MonitorPlay, Plus, Settings2, UserX, X } from "lucide-react";
+import Link from "next/link";
+import { Copy, MessageCircle, MonitorPlay, Plus, UserX, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,11 +16,10 @@ import type { TurnStatus } from "@/lib/turnos/transitions";
 import { cn } from "@/lib/utils";
 import type { VistaTablero } from "@/server/turnos/service";
 import { AgendaCalendario, FiltroEspecialidad } from "./agenda-calendario";
-import { AgendasConfig } from "./agendas-config";
 import { colorDeAgenda } from "./color";
 
 /**
- * 039 — Recepción: «Hoy» (la fila del día de cada agenda) y «Agenda» (la
+ * 039 — Recepción: «Hoy» (la fila del día de cada agenda) y «Calendario» (la
  * rejilla de horas). Se refresca sola con el SSE (`turno.changed`) y, si el
  * canal se cae, cada 20 s.
  */
@@ -38,16 +38,12 @@ const PASADO: Partial<Record<TurnStatus, { label: string; variant: "success" | "
 
 export function TurnosClient({
   puedeConfigurar,
-  citas = false,
 }: {
   puedeConfigurar: boolean;
-  /** ¿Está la agenda de Citas de Vocero? Sin ella, «Recibe las citas» no aplica. */
-  citas?: boolean;
 }) {
   const [vista, setVista] = useState<"hoy" | "agenda">("hoy");
   const [data, setData] = useState<VistaTablero | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
-  const [config, setConfig] = useState(false);
   const [especialidad, setEspecialidad] = useState<string | null>(null);
   const [ahora, setAhora] = useState(() => Date.now());
 
@@ -121,7 +117,7 @@ export function TurnosClient({
                   vista === v ? "bg-card font-semibold text-foreground shadow-sm" : "text-text-3 hover:text-foreground"
                 )}
               >
-                {v === "hoy" ? "Hoy" : "Agenda"}
+                {v === "hoy" ? "Hoy" : "Calendario"}
               </button>
             ))}
           </div>
@@ -136,12 +132,6 @@ export function TurnosClient({
               Sala de espera
             </Button>
           </a>
-          {puedeConfigurar && (
-            <Button size="sm" variant={config ? "default" : "outline"} onClick={() => setConfig((v) => !v)}>
-              <Settings2 className="mr-1.5 h-4 w-4" strokeWidth={1.8} />
-              Agendas
-            </Button>
-          )}
         </div>
       </header>
 
@@ -151,14 +141,19 @@ export function TurnosClient({
             {aviso}
           </p>
         )}
-        {config && puedeConfigurar && <AgendasConfig citas={citas} onSaved={() => void refetch()} />}
 
         {vista === "agenda" && <AgendaCalendario />}
 
         {vista === "hoy" && data && data.agendas.length === 0 && (
           <Card className="p-8 text-center text-sm text-text-3">
             Todavía no hay agendas.{" "}
-            {puedeConfigurar ? "Creá la primera desde «Agendas»." : "Pedile al dueño que cree una o que te asigne la tuya."}
+            {puedeConfigurar ? (
+              <Link href="/agendas" className="font-medium text-foreground underline">
+                Creá la primera en Agendas.
+              </Link>
+            ) : (
+              "Pedile al dueño que cree una o que te asigne la tuya."
+            )}
           </Card>
         )}
 
