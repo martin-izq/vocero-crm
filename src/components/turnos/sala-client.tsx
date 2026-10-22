@@ -35,7 +35,11 @@ export function SalaClient({ inicial, negocio }: { inicial: Sala; negocio: strin
   }, []);
 
   const tz = sala.timezone;
-  const pocas = sala.agendas.length <= 2;
+  // Solo las agendas con gente hoy; el índice original mantiene su color.
+  const conTurnos = sala.agendas
+    .map((a, i) => ({ a, i }))
+    .filter(({ a }) => a.llamado.length + a.atendiendo.length + a.siguientes.length > 0);
+  const pocas = conTurnos.length <= 2;
 
   return (
     <main className="flex min-h-dvh flex-col bg-background text-foreground">
@@ -51,7 +55,10 @@ export function SalaClient({ inicial, negocio }: { inicial: Sala; negocio: strin
         className="grid flex-1 content-start gap-6 p-8"
         style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${pocas ? "26rem" : "20rem"}, 1fr))` }}
       >
-        {sala.agendas.map((a, i) => {
+        {conTurnos.length === 0 && (
+          <p className="col-span-full py-24 text-center text-3xl text-text-3">Todavía no hay turnos.</p>
+        )}
+        {conTurnos.map(({ a, i }) => {
           const pasa = a.llamado[0] ?? null;
           return (
             <section
