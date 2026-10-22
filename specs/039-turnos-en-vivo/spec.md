@@ -57,9 +57,16 @@ número compartido del PLAN-MVP del POC quedan afuera.
 9. **Citas del día**: con `AGENDA=on`, las citas de hoy entran como turnos con
    horario a la agenda marcada «recibe las citas». Atendido marca la cita
    `realizada`; ausente, `no_show`; una cita cancelada saca su turno de la fila.
-10. **Agenda de la semana**: la pestaña «Agenda» de Turnos muestra los turnos
-    con horario de siete días (`GET /api/turnos/reservas?desde=`), con un color
-    por agenda y un filtro. Desde ahí se cancela un turno que sigue en espera.
+10. **Agenda**: la pestaña «Agenda» de Turnos es una rejilla de horas, como
+    Google Calendar (`GET /api/turnos/reservas?desde=`, una semana).
+    - Semana: una columna por día. Día: una columna por agenda, con su
+      horario sombreado y sus huecos libres.
+    - Cada turno ocupa lo que dura, con el color de su agenda. El de la fila
+      sin horario se dibuja punteado a su hora estimada.
+    - Una línea marca la hora actual y cada turno de hoy dice cuánto falta.
+    - Al tocar un turno se abre su detalle: llamar (hoy) o cancelar.
+    - La sala de espera va siempre en tema oscuro, con reloj, el número
+      llamado en grande y un destello cuando cambia.
 11. **Operario** (rol `operator`, el médico): el propietario lo crea o lo
     cambia en Ajustes → Equipo y elige sus agendas (`agenda_operator`).
     - Ve solo Turnos, y dentro solo sus agendas: «Hoy» y «Agenda».

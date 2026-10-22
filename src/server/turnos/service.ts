@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import { asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne } from "drizzle-orm";
+import { asc, desc, eq, gt, gte, inArray, isNull, lt, lte, ne } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
@@ -247,12 +247,23 @@ export type VistaTablero = ReturnType<typeof vistaTablero>;
 export const DIAS_DE_AGENDA = 7;
 
 /**
- * La pestaña «Agenda»: los turnos con horario (reservas, y citas ya en la fila)
- * de `dias` días desde `desde`, de las agendas activas del alcance. Sin los
- * cancelados: un hueco liberado se ve libre.
+ * La pestaña «Agenda»: los turnos de `dias` días desde `desde`, de las agendas
+ * activas del alcance, listos para una rejilla de horas. Sin los cancelados:
+ * un hueco liberado se ve libre.
+ *
+ * Cada turno trae dónde dibujarlo (`startAt`) y cuánto ocupa: la reserva, a
+ * su hora; el que ya pasó, cuando empezó y lo que duró; el de la fila de hoy
+ * sin horario, a su hora estimada (`aproximado`).
  */
-export async function reservas(organizationId: string, desde: string, dias: number, alcance: string[] | null) {
+export async function reservas(
+  organizationId: string,
+  desde: string,
+  dias: number,
+  alcance: string[] | null,
+  now = new Date()
+) {
   const tz = await businessTimezone(organizationId);
+  const hoy = hoyEn(tz, now);
   const agendas = (await listarAgendas(organizationId, { soloActivas: true })).filter((a) =>
     dentroDelAlcance(alcance, a.id)
   );
@@ -273,29 +284,66 @@ export async function reservas(organizationId: string, desde: string, dias: numb
               ),
               gte(schema.turn.day, desde),
               lte(schema.turn.day, hasta),
-              isNotNull(schema.turn.scheduledAt),
               ne(schema.turn.status, "cancelled")
             )
-          )
-          .orderBy(asc(schema.turn.scheduledAt));
-  const prefijo = new Map(agendas.map((a) => [a.id, a.numberPrefix]));
+          );
+
+  // La estimación de hoy, por agenda: dónde cae quien no tiene horario.
+  const estimados = new Map<string, Date>();
+  for (const a of agendas) {
+    const deHoy = turns.filter((t) => t.agendaId === a.id && t.day === hoy);
+    if (deHoy.length === 0) continue;
+    for (const [id, e] of estimateAgenda(deHoy.map(paraEstimar), a.slotMinutes, now).turns) {
+      estimados.set(id, e.estimatedAt);
+    }
+  }
+
+  const porId = new Map(agendas.map((a) => [a.id, a]));
+  const vista = turns.flatMap((t) => {
+    const agenda = porId.get(t.agendaId)!;
+    const estimado = estimados.get(t.id) ?? null;
+    const inicio = t.startedAt ?? t.scheduledAt ?? estimado ?? t.joinedAt;
+    const duro =
+      t.startedAt && t.finishedAt ? Math.round((t.finishedAt.getTime() - t.startedAt.getTime()) / 60_000) : null;
+    return [
+      {
+        id: t.id,
+        agendaId: t.agendaId,
+        day: t.day,
+        code: codigo(agenda.numberPrefix, t.number),
+        displayName: t.displayName,
+        status: t.status,
+        source: t.source,
+        scheduledAt: t.scheduledAt?.toISOString() ?? null,
+        estimatedAt: estimado?.toISOString() ?? null,
+        startAt: inicio.toISOString(),
+        minutes: Math.max(5, duro ?? agenda.slotMinutes),
+        /** Dibujado a una hora estimada, no a una pactada. */
+        aproximado: !t.startedAt && !t.scheduledAt,
+        confirmed: t.confirmedAt !== null,
+        whatsapp: t.conversationId !== null,
+      },
+    ];
+  });
+  vista.sort((x, y) => x.startAt.localeCompare(y.startAt));
+
   return {
     timezone: tz,
-    hoy: hoyEn(tz),
+    hoy,
+    now: now.toISOString(),
     desde,
     dias,
-    agendas: agendas.map((a) => ({ id: a.id, name: a.name, numberPrefix: a.numberPrefix })),
-    turns: turns.map((t) => ({
-      id: t.id,
-      agendaId: t.agendaId,
-      day: t.day,
-      code: codigo(prefijo.get(t.agendaId) ?? "", t.number),
-      displayName: t.displayName,
-      status: t.status,
-      source: t.source,
-      scheduledAt: t.scheduledAt!.toISOString(),
-      whatsapp: t.conversationId !== null,
+    agendas: agendas.map((a) => ({
+      id: a.id,
+      name: a.name,
+      room: a.room,
+      numberPrefix: a.numberPrefix,
+      walkInMode: a.walkInMode,
+      slotMinutes: a.slotMinutes,
+      opensAt: a.opensAt,
+      closesAt: a.closesAt,
     })),
+    turns: vista,
   };
 }
 
@@ -346,6 +394,7 @@ export type VistaPaciente = NonNullable<Awaited<ReturnType<typeof vistaPorToken>
 export async function vistaSala(organizationId: string, now = new Date()) {
   const t = await tablero(organizationId, now);
   return {
+    timezone: t.timezone,
     agendas: t.agendas.map((d) => ({
       id: d.agenda.id,
       name: d.agenda.name,

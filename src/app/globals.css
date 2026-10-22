@@ -374,3 +374,18 @@
     animation-duration: 0.01ms !important;
   }
 }
+
+/* 039 — Sala de espera: el número recién llamado destella unos segundos. */
+@layer components {
+  @keyframes sala-llamado {
+    0%, 40%, 80% { box-shadow: 0 0 0 0 var(--accent-soft); background-color: var(--accent-tint); }
+    20%, 60% { box-shadow: 0 0 0 14px transparent; background-color: var(--bg-raised); }
+    100% { box-shadow: 0 0 0 0 transparent; background-color: var(--bg-raised); }
+  }
+  .sala-llamado {
+    animation: sala-llamado 6s ease-out 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sala-llamado { animation: none; }
+  }
+}
