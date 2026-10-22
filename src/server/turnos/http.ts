@@ -11,6 +11,7 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const agendaSchema = z
   .object({
     name: z.string().trim().min(1).max(80),
+    specialty: z.string().trim().max(60).default(""),
     room: z.string().trim().max(80).default(""),
     walkInMode: z.enum(["queue", "gaps", "none"]),
     slotMinutes: z.number().int().min(1).max(480),

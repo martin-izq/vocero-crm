@@ -73,7 +73,9 @@ export function SalaClient({ inicial, negocio }: { inicial: Sala; negocio: strin
               <div className="flex flex-1 flex-col gap-6 p-7">
                 <div>
                   <h2 className="text-3xl font-bold tracking-tight">{a.name}</h2>
-                  {a.room && <p className="mt-1 text-lg text-text-3">{a.room}</p>}
+                  {(a.specialty || a.room) && (
+                    <p className="mt-1 text-lg text-text-3">{[a.specialty, a.room].filter(Boolean).join(" · ")}</p>
+                  )}
                 </div>
 
                 <div aria-live="assertive">

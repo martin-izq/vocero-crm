@@ -93,6 +93,7 @@ if (agenteEstaba) await api("PUT", "/api/agent/profile", { enabled: false });
 
 const AGENDA = {
   name: "E2E Turnos",
+  specialty: "E2E Clínica",
   room: "Box 9",
   walkInMode: "queue",
   slotMinutes: 40,
@@ -155,6 +156,11 @@ try {
   ok(Boolean(convP), "la conversación existe");
   const estado0 = await bot("GET", `/api/bot/turnos?conversationId=${convP}`);
   ok(estado0.status === 200 && estado0.body.agendas.some((a) => a.id === agenda.id), "GET /api/bot/turnos lista la agenda");
+  const paraBot = estado0.body.agendas.find((a) => a.id === agenda.id);
+  ok(paraBot?.specialty === "E2E Clínica", `el cerebro ve la especialidad (${paraBot?.specialty})`);
+  ok(paraBot?.nextSlot === null, "una fila por número no trae primer horario");
+  const conReservas = estado0.body.agendas.find((a) => a.id === agendaReservas.id);
+  ok(Boolean(conReservas?.nextSlot?.startUtc), `una agenda con reservas trae su primer horario (${conReservas?.nextSlot?.dayLabel} ${conReservas?.nextSlot?.time})`);
   const altaP = await bot("POST", "/api/bot/turnos", { conversationId: convP, agendaId: agenda.id });
   ok(altaP.status === 201, `POST /api/bot/turnos → ${altaP.status}`);
   const turnoP = altaP.body?.turno;

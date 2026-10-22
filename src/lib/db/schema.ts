@@ -1293,6 +1293,8 @@ export const queueAgenda = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /** Especialidad del profesional («Pediatría»): agrupa agendas. Vacía = sin especialidad. */
+    specialty: text("specialty").notNull().default(""),
     /** Consultorio o box: lo que la sala y el aviso de «es tu turno» nombran. */
     room: text("room").notNull().default(""),
     /** `queue`: fila por número · `gaps`: toma el próximo hueco libre · `none`: solo con cita. */

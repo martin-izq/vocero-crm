@@ -78,11 +78,23 @@ número compartido del PLAN-MVP del POC quedan afuera.
     configura): borra la agenda con su historial y sus operarios asignados.
     Con turnos pendientes de hoy en adelante responde 409: hay que
     cancelarlos o apagar la agenda.
-13. **Datos de demo**: `pnpm seed:turnos` crea cinco agendas (letras M, P, K,
-    L, F: una por modo, una cerrada a esta hora y una apagada) con
+13. **Datos de demo**: `pnpm seed:turnos` crea siete agendas (letras M, R, P,
+    B, K, L, F: Clínica médica y Pediatría con dos médicos cada una, todos
+    los modos, una cerrada a esta hora y una apagada) con
     historial, la fila de hoy armada alrededor de la hora actual y reservas
     para la semana. Re-ejecutable: solo recrea esas letras. Los turnos no
     tienen conversación, así que no se avisa a nadie.
+
+14. **Especialidad**: cada agenda (un médico o un servicio) tiene una
+    `specialty` opcional, de texto libre con sugerencias de las ya cargadas.
+    - Hoy y Agenda filtran por especialidad (con dos o más); la sala y los
+      encabezados la muestran junto al consultorio.
+    - El cerebro la recibe en `GET /api/bot/turnos`, junto con `nextSlot` (el
+      primer horario libre de las agendas con reservas). Si el paciente pide
+      una especialidad sin nombrar médico, Nea le ofrece los médicos con su
+      espera o su primer horario; si le da igual, toma el que lo atiende antes.
+    - No hay tabla de médicos: el nombre de la agenda es el médico (decisión
+      de Martin, 2026-10-22).
 
 ## Decisiones
 

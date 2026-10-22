@@ -1,0 +1,1 @@
+ALTER TABLE "queue_agenda" ADD COLUMN "specialty" text DEFAULT '' NOT NULL;

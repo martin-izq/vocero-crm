@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 type AgendaForm = {
   id?: string;
   name: string;
+  specialty: string;
   room: string;
   walkInMode: "queue" | "gaps" | "none";
   slotMinutes: number;
@@ -24,6 +25,7 @@ type AgendaForm = {
 
 const VACIA: AgendaForm = {
   name: "",
+  specialty: "",
   room: "",
   walkInMode: "queue",
   slotMinutes: 15,
@@ -102,7 +104,21 @@ export function AgendasConfig({ citas = false, onSaved }: { citas?: boolean; onS
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Campo id="ag-nombre" label="Nombre">
-          <Input id="ag-nombre" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Clínica general" />
+          <Input id="ag-nombre" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Dra. Laura Méndez" />
+        </Campo>
+        <Campo id="ag-especialidad" label="Especialidad">
+          <Input
+            id="ag-especialidad"
+            list="ag-especialidades"
+            value={form.specialty}
+            onChange={(e) => set("specialty", e.target.value)}
+            placeholder="Pediatría"
+          />
+          <datalist id="ag-especialidades">
+            {[...new Set(agendas.map((a) => a.specialty).filter(Boolean))].map((e) => (
+              <option key={e} value={e} />
+            ))}
+          </datalist>
         </Campo>
         <Campo id="ag-sala" label="Consultorio">
           <Input id="ag-sala" value={form.room} onChange={(e) => set("room", e.target.value)} placeholder="Consultorio 2" />

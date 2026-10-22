@@ -208,6 +208,7 @@ export function vistaTablero(t: Awaited<ReturnType<typeof tablero>>) {
     agendas: t.agendas.map((d) => ({
       id: d.agenda.id,
       name: d.agenda.name,
+      specialty: d.agenda.specialty,
       room: d.agenda.room,
       walkInMode: d.agenda.walkInMode,
       numberPrefix: d.agenda.numberPrefix,
@@ -336,6 +337,7 @@ export async function reservas(
     agendas: agendas.map((a) => ({
       id: a.id,
       name: a.name,
+      specialty: a.specialty,
       room: a.room,
       numberPrefix: a.numberPrefix,
       walkInMode: a.walkInMode,
@@ -398,6 +400,7 @@ export async function vistaSala(organizationId: string, now = new Date()) {
     agendas: t.agendas.map((d) => ({
       id: d.agenda.id,
       name: d.agenda.name,
+      specialty: d.agenda.specialty,
       room: d.agenda.room,
       llamado: d.orden.filter((x) => x.status === "called").map((x) => codigo(d.agenda.numberPrefix, x.number)),
       atendiendo: d.orden.filter((x) => x.status === "in_service").map((x) => codigo(d.agenda.numberPrefix, x.number)),
@@ -807,6 +810,7 @@ export async function cerrarDia(input: { organizationId: string; agendaId: strin
 
 export type AgendaInput = {
   name: string;
+  specialty?: string;
   room?: string;
   walkInMode: "queue" | "gaps" | "none";
   slotMinutes: number;
@@ -1082,7 +1086,7 @@ export async function avisar(organizationId: string, agendaId: string, now = new
 /** Las agendas con su espera ahora, y los turnos de hoy de este contacto. */
 export async function estadoParaContacto(organizationId: string, contactId: string, now = new Date()) {
   const t = await tablero(organizationId, now);
-  const agendas = t.agendas.map((d) => {
+  const agendas = await Promise.all(t.agendas.map(async (d) => {
     const enEspera = d.orden.filter((x) => x.status !== "in_service").length;
     const ultimo = [...d.estimate.turns.values()].at(-1);
     const espera = ultimo
@@ -1091,6 +1095,7 @@ export async function estadoParaContacto(organizationId: string, contactId: stri
     return {
       id: d.agenda.id,
       name: d.agenda.name,
+      specialty: d.agenda.specialty || null,
       walkIn: d.agenda.walkInMode !== "none",
       /** Toma reservas con horario (hoy u otro día): ver `huecosDeAgenda`. */
       reservas: d.agenda.walkInMode !== "queue",
@@ -1099,8 +1104,10 @@ export async function estadoParaContacto(organizationId: string, contactId: stri
       waitMinutes: Math.round(espera),
       opensAt: d.agenda.opensAt,
       closesAt: d.agenda.closesAt,
+      /** El primer horario libre para reservar: para comparar profesionales de una especialidad. */
+      nextSlot: d.agenda.walkInMode === "queue" ? null : await primerHueco(organizationId, d.agenda.id, t.day, t.timezone, now),
     };
-  });
+  }));
   const turnos = t.agendas.flatMap((d) =>
     d.turns
       .filter((x) => x.contactId === contactId && ACTIVOS.includes(x.status))
@@ -1150,6 +1157,16 @@ export async function estadoParaContacto(organizationId: string, contactId: stri
 }
 
 /** Un hueco reservable como lo ve el cerebro. */
+/** El primer hueco libre de una agenda desde `day`, dentro de los días de reserva. */
+async function primerHueco(organizationId: string, agendaId: string, day: string, tz: string, now: Date) {
+  // ponytail: un día por consulta; corta en el primero con lugar.
+  for (let i = 0; i <= DIAS_DE_RESERVA; i++) {
+    const [h] = await huecosDeAgenda(organizationId, agendaId, addDaysISO(day, i), now);
+    if (h) return huecoPayload(h, tz);
+  }
+  return null;
+}
+
 export function huecoPayload(h: Date, tz: string) {
   return { startUtc: h.toISOString(), day: dayIsoInTz(h, tz), dayLabel: fechaLocal(h, tz), time: horaLocal(h, tz) };
 }

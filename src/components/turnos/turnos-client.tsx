@@ -14,7 +14,7 @@ import type { MainAction } from "@/lib/turnos/reception";
 import type { TurnStatus } from "@/lib/turnos/transitions";
 import { cn } from "@/lib/utils";
 import type { VistaTablero } from "@/server/turnos/service";
-import { AgendaCalendario } from "./agenda-calendario";
+import { AgendaCalendario, FiltroEspecialidad } from "./agenda-calendario";
 import { AgendasConfig } from "./agendas-config";
 import { colorDeAgenda } from "./color";
 
@@ -48,6 +48,7 @@ export function TurnosClient({
   const [data, setData] = useState<VistaTablero | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [config, setConfig] = useState(false);
+  const [especialidad, setEspecialidad] = useState<string | null>(null);
   const [ahora, setAhora] = useState(() => Date.now());
 
   const refetch = useCallback(async () => {
@@ -94,7 +95,12 @@ export function TurnosClient({
     void refetch();
   }
 
-  const todos = data?.agendas.flatMap((a) => a.turns) ?? [];
+  const especialidades = [...new Set(data?.agendas.map((a) => a.specialty).filter(Boolean) ?? [])].sort();
+  // El índice original mantiene el color de cada agenda con el filtro puesto.
+  const visibles = (data?.agendas ?? [])
+    .map((a, i) => ({ a, i }))
+    .filter(({ a }) => !especialidad || a.specialty === especialidad);
+  const todos = visibles.flatMap(({ a }) => a.turns);
   const cuenta = (s: TurnStatus[]) => todos.filter((t) => s.includes(t.status)).length;
 
   return (
@@ -158,6 +164,9 @@ export function TurnosClient({
 
         {vista === "hoy" && data && data.agendas.length > 0 && (
           <>
+            {especialidades.length > 1 && (
+              <FiltroEspecialidad opciones={especialidades} valor={especialidad} onChange={setEspecialidad} />
+            )}
             <div className="grid grid-cols-4 gap-2 sm:gap-3">
               <Dato label="En espera" valor={cuenta(["waiting"])} />
               <Dato label="En consultorio" valor={cuenta(["called", "in_service"])} />
@@ -165,7 +174,7 @@ export function TurnosClient({
               <Dato label="Ausentes" valor={cuenta(["absent"])} />
             </div>
             <div className="grid items-start gap-4 xl:grid-cols-2">
-              {data.agendas.map((a, i) => (
+              {visibles.map(({ a, i }) => (
                 <AgendaCard
                   key={a.id}
                   agenda={a}
@@ -231,6 +240,7 @@ function AgendaCard({
           <div className="min-w-0">
             <h3 className="truncate text-[16px] font-bold">{agenda.name}</h3>
             <p className="text-xs text-text-3">
+              {agenda.specialty && `${agenda.specialty} · `}
               {agenda.room || "Sin consultorio"} · {agenda.opensAt}–{agenda.closesAt} · promedio{" "}
               {duracion(agenda.averageMinutes)}
             </p>

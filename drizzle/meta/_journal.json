@@ -176,6 +176,13 @@
       "when": 1792673448677,
       "tag": "0024_turnos_operario",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792689385936,
+      "tag": "0025_turnos_especialidad",
+      "breakpoints": true
     }
   ]
 }

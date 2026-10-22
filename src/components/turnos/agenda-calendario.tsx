@@ -43,6 +43,7 @@ export function AgendaCalendario() {
   const [ancla, setAncla] = useState<string | null>(null);
   const [data, setData] = useState<VistaReservas | null>(null);
   const [ocultas, setOcultas] = useState<Set<string>>(new Set());
+  const [especialidad, setEspecialidad] = useState<string | null>(null);
   const [elegido, setElegido] = useState<string | null>(null);
   const [ahora, setAhora] = useState(() => Date.now());
 
@@ -82,10 +83,13 @@ export function AgendaCalendario() {
 
   if (!data || !ancla) return <p className="text-sm text-muted-foreground">Cargando la agenda…</p>;
 
-  const visibles = data.agendas.filter((a) => !ocultas.has(a.id));
+  const especialidades = [...new Set(data.agendas.map((a) => a.specialty).filter(Boolean))].sort();
+  const delFiltro = data.agendas.filter((a) => !especialidad || a.specialty === especialidad);
+  const visibles = delFiltro.filter((a) => !ocultas.has(a.id));
+  const idsVisibles = new Set(visibles.map((a) => a.id));
   const delDia = (day: string, agendaId?: string) =>
     (ubicados.get(day) ?? []).filter((u) =>
-      agendaId ? u.turno.agendaId === agendaId : !ocultas.has(u.turno.agendaId)
+      agendaId ? u.turno.agendaId === agendaId : idsVisibles.has(u.turno.agendaId)
     );
   const dias = vista === "semana" ? Array.from({ length: 7 }, (_, i) => addDaysISO(startOfWeek(ancla), i)) : [ancla];
   const franja = franjaVisible(
@@ -133,8 +137,12 @@ export function AgendaCalendario() {
         />
       </div>
 
+      {especialidades.length > 1 && (
+        <FiltroEspecialidad opciones={especialidades} valor={especialidad} onChange={setEspecialidad} />
+      )}
+
       <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-        {data.agendas.map((a, i) => {
+        {delFiltro.map((a) => {
           const on = !ocultas.has(a.id);
           return (
             <button
@@ -154,7 +162,7 @@ export function AgendaCalendario() {
                 on ? "bg-card text-foreground" : "bg-subtle text-text-3 line-through"
               )}
             >
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: colorDeAgenda(i) }} />
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: colorDeAgenda(indice.get(a.id) ?? 0) }} />
               {a.name}
               <span className="font-mono text-text-3">
                 {a.opensAt}–{a.closesAt === "23:59" ? "24:00" : a.closesAt}
@@ -223,6 +231,7 @@ export function AgendaCalendario() {
                   {c.agenda.name}
                 </span>
                 <span className="text-[11px] text-text-3">
+                  {c.agenda.specialty && `${c.agenda.specialty} · `}
                   {c.agenda.room || "Sin consultorio"} · {delDia(c.day, c.agenda.id).length} turnos
                 </span>
               </div>
@@ -629,6 +638,36 @@ function Detalle({
         </div>
       )}
       {error && <p className="mt-2 text-sm text-danger-text">{error}</p>}
+    </div>
+  );
+}
+
+/** Filtro por especialidad (Hoy y Agenda); solo se muestra con dos o más. */
+export function FiltroEspecialidad({
+  opciones,
+  valor,
+  onChange,
+}: {
+  opciones: string[];
+  valor: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  return (
+    <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="group" aria-label="Especialidad">
+      {[null, ...opciones].map((e) => (
+        <button
+          key={e ?? ""}
+          type="button"
+          aria-pressed={valor === e}
+          onClick={() => onChange(e)}
+          className={cn(
+            "shrink-0 rounded-full border px-3 py-1 text-sm transition-colors",
+            valor === e ? "border-foreground bg-foreground text-background" : "text-text-2 hover:border-border-strong"
+          )}
+        >
+          {e ?? "Todas"}
+        </button>
+      ))}
     </div>
   );
 }

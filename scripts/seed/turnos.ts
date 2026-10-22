@@ -1,9 +1,9 @@
 /**
  * 039 — Seed de Turnos para probar a mano: `pnpm seed:turnos`.
  *
- * Crea cinco agendas de demo (una por modo de atención, una apagada) con
- * historial de los últimos días, la fila de HOY armada alrededor de la hora
- * actual (atendidos, en consultorio, llamado, esperando, ausente) y reservas
+ * Crea agendas de demo (dos especialidades con dos médicos cada una, todos
+ * los modos de atención y una apagada) con historial de los últimos días, la
+ * fila de HOY armada alrededor de la hora actual (atendidos, en consultorio, llamado, esperando, ausente) y reservas
  * para la semana que viene. Re-ejecutable: borra y recrea SOLO las agendas
  * con las letras de abajo; las demás no se tocan.
  *
@@ -21,11 +21,13 @@ type Agenda = typeof schema.queueAgenda.$inferInsert;
 type Turno = typeof schema.turn.$inferInsert;
 
 const AGENDAS: Omit<Agenda, "id" | "organizationId">[] = [
-  { name: "Dra. Laura Méndez", room: "Consultorio 1", walkInMode: "gaps", slotMinutes: 15, opensAt: "08:00", closesAt: "14:00", numberPrefix: "M", notifyBefore: 2 },
-  { name: "Dr. Pablo Sosa", room: "Consultorio 3", walkInMode: "queue", slotMinutes: 20, opensAt: "10:00", closesAt: "18:00", numberPrefix: "P", notifyBefore: 2 },
-  { name: "Kinesiología", room: "Box 2", walkInMode: "none", slotMinutes: 45, opensAt: "08:00", closesAt: "20:00", numberPrefix: "K", notifyBefore: 1 },
-  { name: "Laboratorio", room: "Extracciones", walkInMode: "queue", slotMinutes: 5, opensAt: "07:00", closesAt: "10:00", numberPrefix: "L", notifyBefore: 3 },
-  { name: "Dra. Inés Ferrari", room: "Consultorio 5", walkInMode: "gaps", slotMinutes: 30, opensAt: "15:00", closesAt: "19:00", numberPrefix: "F", active: false },
+  { name: "Dra. Laura Méndez", specialty: "Clínica médica", room: "Consultorio 1", walkInMode: "gaps", slotMinutes: 15, opensAt: "08:00", closesAt: "14:00", numberPrefix: "M", notifyBefore: 2 },
+  { name: "Dr. Pablo Sosa", specialty: "Pediatría", room: "Consultorio 3", walkInMode: "queue", slotMinutes: 20, opensAt: "10:00", closesAt: "18:00", numberPrefix: "P", notifyBefore: 2 },
+  { name: "Dra. Carla Benítez", specialty: "Pediatría", room: "Consultorio 4", walkInMode: "gaps", slotMinutes: 20, opensAt: "09:00", closesAt: "17:00", numberPrefix: "B", notifyBefore: 2 },
+  { name: "Dr. Martín Rossi", specialty: "Clínica médica", room: "Consultorio 2", walkInMode: "none", slotMinutes: 15, opensAt: "14:00", closesAt: "20:00", numberPrefix: "R", notifyBefore: 2 },
+  { name: "Kinesiología", specialty: "Kinesiología", room: "Box 2", walkInMode: "none", slotMinutes: 45, opensAt: "08:00", closesAt: "20:00", numberPrefix: "K", notifyBefore: 1 },
+  { name: "Laboratorio", specialty: "Laboratorio", room: "Extracciones", walkInMode: "queue", slotMinutes: 5, opensAt: "07:00", closesAt: "10:00", numberPrefix: "L", notifyBefore: 3 },
+  { name: "Dra. Inés Ferrari", specialty: "Dermatología", room: "Consultorio 5", walkInMode: "gaps", slotMinutes: 30, opensAt: "15:00", closesAt: "19:00", numberPrefix: "F", active: false },
 ];
 
 const NOMBRES = [
