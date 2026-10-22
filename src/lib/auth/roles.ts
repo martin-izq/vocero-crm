@@ -12,3 +12,30 @@
 export function canConfigure(role: string | null | undefined): boolean {
   return role === "owner" || role === "admin";
 }
+
+/**
+ * 039 — El operario (el médico) atiende SUS agendas de turnos y nada más: no
+ * ve la Bandeja, los contactos ni la configuración.
+ */
+export const OPERARIO = "operator";
+
+export function esOperario(role: string | null | undefined): boolean {
+  return role === OPERARIO;
+}
+
+/**
+ * Qué rutas puede pedir un operario. Sin ruta conocida, nada: si el
+ * middleware no marcó la petición, se niega en vez de dejar pasar.
+ */
+export function operarioPuede(path: string | null | undefined): boolean {
+  if (!path) return false;
+  return (
+    path === "/turnos" ||
+    path.startsWith("/turnos/") ||
+    path.startsWith("/api/turnos/") ||
+    path === "/api/events"
+  );
+}
+
+/** Cabecera con la ruta pedida; la pone `src/middleware.ts`. */
+export const PATH_HEADER = "x-vocero-path";

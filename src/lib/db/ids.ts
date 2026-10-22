@@ -40,6 +40,7 @@ const prefixes = {
   turn: "tn",
   turnEvent: "tev",
   turnNotice: "tno",
+  agendaOperator: "aop",
 } as const;
 
 export type IdKind = keyof typeof prefixes;

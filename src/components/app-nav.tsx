@@ -7,6 +7,7 @@ import { AlertTriangle, LogOut, X } from "lucide-react";
 import type { Branding } from "@/lib/branding";
 import type { ThemePreference } from "@/lib/theme";
 import { cn, initials } from "@/lib/utils";
+import { esOperario } from "@/lib/auth/roles";
 import { appNavGroups, isNavActive, SETTINGS_ITEM, type NavItem } from "@/lib/nav";
 import { signOut } from "@/lib/auth/client";
 import { useEvents } from "@/components/use-events";
@@ -177,7 +178,7 @@ export function AppNav({
       <div className="flex-1" />
 
       {/* Ajustes va abajo, solo: no es trabajo del día. */}
-      {renderItem(SETTINGS_ITEM)}
+      {!esOperario(role) && renderItem(SETTINGS_ITEM)}
 
       <div className="mt-1 flex items-center gap-2.5 rounded-sm px-2.5 py-2 hover:bg-accent">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand-text">
@@ -186,7 +187,7 @@ export function AppNav({
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold">{userName}</span>
           <span className="block truncate text-[11px] text-text-3">
-            {role === "owner" ? "Propietario" : "Equipo"} · En línea
+            {role === "owner" ? "Propietario" : esOperario(role) ? "Operario" : "Equipo"} · En línea
           </span>
         </span>
         <ThemeToggle initial={theme} />

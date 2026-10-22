@@ -11,7 +11,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { canConfigure } from "@/lib/auth/roles";
+import { canConfigure, esOperario } from "@/lib/auth/roles";
 
 /**
  * #87 — El modelo del menú, separado del componente que lo pinta.
@@ -60,6 +60,10 @@ export function appNavGroups({
   /** #86 — La guía de inicio solo para quien puede configurar. */
   role?: string | null;
 }): NavGroup[] {
+  // 039 — El operario (el médico) solo atiende Turnos.
+  if (esOperario(role)) {
+    return turnos ? [{ items: [{ href: "/turnos", label: "Turnos", icon: ClipboardList }] }] : [];
+  }
   const trabajo: NavItem[] = [
     { href: "/inbox", label: "Bandeja", icon: Inbox, badge: true },
     { href: "/pipeline", label: "Pipeline", icon: Kanban },

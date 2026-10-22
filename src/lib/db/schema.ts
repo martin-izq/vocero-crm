@@ -1318,6 +1318,28 @@ export const queueAgenda = pgTable(
   ]
 );
 
+/**
+ * Qué agendas atiende cada cuenta con rol `operator` (el médico). Un operario
+ * solo ve y acciona esas agendas; sin filas aquí no ve ninguna.
+ */
+export const agendaOperator = pgTable(
+  "agenda_operator",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    agendaId: text("agenda_id")
+      .notNull()
+      .references(() => queueAgenda.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("agenda_operator_uq").on(t.agendaId, t.userId)]
+);
+
 export const TURN_STATUSES = [
   "waiting",
   "called",

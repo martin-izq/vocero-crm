@@ -1,9 +1,10 @@
 import { createHash, createHmac } from "node:crypto";
-import { asc, desc, eq, gt, gte, inArray, isNull, lt } from "drizzle-orm";
+import { asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import { getEnv } from "@/lib/env";
+import { esOperario } from "@/lib/auth/roles";
 import { addDaysISO, dayIsoInTz, zonedWallClockToUtc } from "@/lib/time/slots";
 import { avisosPendientes } from "@/lib/turnos/avisos";
 import { attentionOrder, estimateAgenda, type AgendaEstimate, type EstimateTurn } from "@/lib/turnos/estimate";
@@ -115,6 +116,53 @@ async function turnosDelDia(organizationId: string, agendaIds: string[], day: st
     );
 }
 
+/* ------------------------------------------------------------------ */
+/* Operarios                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Qué agendas puede ver y accionar quien pide. `null` es todas (dueño,
+ * recepción); un operario, solo las que tiene asignadas en Equipo.
+ */
+export async function alcanceDe(session: {
+  organizationId: string;
+  userId: string;
+  role: string;
+}): Promise<string[] | null> {
+  if (!esOperario(session.role)) return null;
+  return (await agendasDelOperario(session.organizationId))[session.userId] ?? [];
+}
+
+export function dentroDelAlcance(alcance: string[] | null, agendaId: string): boolean {
+  return alcance === null || alcance.includes(agendaId);
+}
+
+/** userId → agendas asignadas, para la pantalla de Equipo. */
+export async function agendasDelOperario(organizationId: string): Promise<Record<string, string[]>> {
+  const rows = await getDb()
+    .select({ userId: schema.agendaOperator.userId, agendaId: schema.agendaOperator.agendaId })
+    .from(schema.agendaOperator)
+    .where(scoped(schema.agendaOperator.organizationId, organizationId));
+  const out: Record<string, string[]> = {};
+  for (const r of rows) (out[r.userId] ??= []).push(r.agendaId);
+  return out;
+}
+
+/** Reemplaza las agendas de un operario. Ignora ids que no son de este negocio. */
+export async function asignarAgendas(organizationId: string, userId: string, agendaIds: string[]) {
+  const propias = new Set((await listarAgendas(organizationId)).map((a) => a.id));
+  const db = getDb();
+  await db
+    .delete(schema.agendaOperator)
+    .where(scoped(schema.agendaOperator.organizationId, organizationId, eq(schema.agendaOperator.userId, userId)));
+  const ids = [...new Set(agendaIds)].filter((id) => propias.has(id));
+  if (ids.length > 0) {
+    await db
+      .insert(schema.agendaOperator)
+      .values(ids.map((agendaId) => ({ id: newId("agendaOperator"), organizationId, userId, agendaId })));
+  }
+}
+
 export type DiaDeAgenda = {
   agenda: AgendaRow;
   turns: TurnRow[];
@@ -133,12 +181,17 @@ function armarDia(agenda: AgendaRow, turns: TurnRow[], now: Date): DiaDeAgenda {
   return { agenda, turns, estimate, orden, principal: mainAction(orden) };
 }
 
-/** El día de todas las agendas activas, ya con las citas de hoy adentro. */
-export async function tablero(organizationId: string, now = new Date()) {
+/**
+ * El día de todas las agendas activas (o solo las del `alcance`), ya con las
+ * citas de hoy adentro.
+ */
+export async function tablero(organizationId: string, now = new Date(), alcance: string[] | null = null) {
   const tz = await businessTimezone(organizationId);
   const day = hoyEn(tz, now);
   await traerCitasDeHoy(organizationId, tz, day, now);
-  const agendas = await listarAgendas(organizationId, { soloActivas: true });
+  const agendas = (await listarAgendas(organizationId, { soloActivas: true })).filter((a) =>
+    dentroDelAlcance(alcance, a.id)
+  );
   const turns = await turnosDelDia(organizationId, agendas.map((a) => a.id), day);
   return {
     timezone: tz,
@@ -189,6 +242,64 @@ export function vistaTablero(t: Awaited<ReturnType<typeof tablero>>) {
 }
 
 export type VistaTablero = ReturnType<typeof vistaTablero>;
+
+/** Tope de días de la vista «Agenda». */
+export const DIAS_DE_AGENDA = 7;
+
+/**
+ * La pestaña «Agenda»: los turnos con horario (reservas, y citas ya en la fila)
+ * de `dias` días desde `desde`, de las agendas activas del alcance. Sin los
+ * cancelados: un hueco liberado se ve libre.
+ */
+export async function reservas(organizationId: string, desde: string, dias: number, alcance: string[] | null) {
+  const tz = await businessTimezone(organizationId);
+  const agendas = (await listarAgendas(organizationId, { soloActivas: true })).filter((a) =>
+    dentroDelAlcance(alcance, a.id)
+  );
+  const hasta = addDaysISO(desde, dias - 1);
+  const turns =
+    agendas.length === 0
+      ? []
+      : await getDb()
+          .select()
+          .from(schema.turn)
+          .where(
+            scoped(
+              schema.turn.organizationId,
+              organizationId,
+              inArray(
+                schema.turn.agendaId,
+                agendas.map((a) => a.id)
+              ),
+              gte(schema.turn.day, desde),
+              lte(schema.turn.day, hasta),
+              isNotNull(schema.turn.scheduledAt),
+              ne(schema.turn.status, "cancelled")
+            )
+          )
+          .orderBy(asc(schema.turn.scheduledAt));
+  const prefijo = new Map(agendas.map((a) => [a.id, a.numberPrefix]));
+  return {
+    timezone: tz,
+    hoy: hoyEn(tz),
+    desde,
+    dias,
+    agendas: agendas.map((a) => ({ id: a.id, name: a.name, numberPrefix: a.numberPrefix })),
+    turns: turns.map((t) => ({
+      id: t.id,
+      agendaId: t.agendaId,
+      day: t.day,
+      code: codigo(prefijo.get(t.agendaId) ?? "", t.number),
+      displayName: t.displayName,
+      status: t.status,
+      source: t.source,
+      scheduledAt: t.scheduledAt!.toISOString(),
+      whatsapp: t.conversationId !== null,
+    })),
+  };
+}
+
+export type VistaReservas = Awaited<ReturnType<typeof reservas>>;
 
 /** Qué ve el paciente con su link. Nunca nombres de otros: solo números. */
 export async function vistaPorToken(token: string, now = new Date()) {
@@ -509,8 +620,11 @@ export async function transicionar(input: {
   now?: Date;
   /** false: sin avisos por WhatsApp (cerrar el día no es «ya casi» para nadie). */
   avisar?: boolean;
+  /** Solo turnos de estas agendas (el operario); null o ausente, cualquiera. */
+  alcance?: string[] | null;
 }): Promise<Resultado> {
   const now = input.now ?? new Date();
+  if (input.alcance?.length === 0) return { ok: false, message: "No encontramos ese turno." };
   const plan = planTransition(
     { status: input.expected, statusChangedBy: null, statusChangedAt: null },
     input.expected,
@@ -536,7 +650,8 @@ export async function transicionar(input: {
         schema.turn.organizationId,
         input.organizationId,
         eq(schema.turn.id, input.turnId),
-        eq(schema.turn.status, input.expected)
+        eq(schema.turn.status, input.expected),
+        input.alcance ? inArray(schema.turn.agendaId, input.alcance) : undefined
       )
     )
     .returning({ agendaId: schema.turn.agendaId, bookingId: schema.turn.bookingId });
@@ -549,7 +664,14 @@ export async function transicionar(input: {
         at: schema.turn.statusChangedAt,
       })
       .from(schema.turn)
-      .where(scoped(schema.turn.organizationId, input.organizationId, eq(schema.turn.id, input.turnId)))
+      .where(
+        scoped(
+          schema.turn.organizationId,
+          input.organizationId,
+          eq(schema.turn.id, input.turnId),
+          input.alcance ? inArray(schema.turn.agendaId, input.alcance) : undefined
+        )
+      )
       .limit(1);
     const actual = rows[0];
     if (!actual) return { ok: false, message: "No encontramos ese turno." };

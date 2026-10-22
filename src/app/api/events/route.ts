@@ -1,3 +1,4 @@
+import { esOperario } from "@/lib/auth/roles";
 import { requireSession, UnauthorizedError } from "@/lib/auth/session";
 import { subscribe } from "@/server/events/bus";
 
@@ -22,6 +23,9 @@ export async function GET(req: Request) {
     throw err;
   }
   const { organizationId } = session;
+  // 039 — Al operario solo le llega que algo se movió en Turnos: los
+  // mensajes de la Bandeja no son suyos.
+  const soloTurnos = esOperario(session.role);
 
   let cleanup: (() => void) | null = null;
 
@@ -38,6 +42,7 @@ export async function GET(req: Request) {
       send(`: conectado\n\n`);
 
       const unsubscribe = subscribe(organizationId, (event) => {
+        if (soloTurnos && event.type !== "turno.changed") return;
         send(
           `event: ${event.type}\n` +
             `id: ${Date.now()}\n` +

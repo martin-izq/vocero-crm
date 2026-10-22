@@ -315,6 +315,11 @@ try {
     doble.status === 409 && doble.body?.error?.code === "hueco_ocupado" && !doble.body.huecos.some((h) => h.time === "10:00"),
     "el mismo horario para otro → 409 hueco_ocupado, con huecos que ya no lo incluyen"
   );
+  const semana = await api("GET", `/api/turnos/reservas?desde=${manana}`);
+  ok(
+    semana.body?.turns?.some((t) => t.id === reserva.body?.turno?.id && t.day === manana),
+    "la pestaña «Agenda» muestra la reserva de mañana"
+  );
   const estadoR = await bot("GET", `/api/bot/turnos?conversationId=${convR}`);
   ok(estadoR.body?.reservas?.some((x) => x.id === reserva.body?.turno?.id), "el cerebro ve la reserva de mañana");
   const cancelR = await bot("POST", `/api/bot/turnos/${reserva.body?.turno?.id}`, { conversationId: convR, action: "cancel" });
@@ -353,6 +358,65 @@ try {
       Boolean(await hasta(async () => (await salientes(C)).find((m) => textoDe(m).includes("hay demora")))),
       "a la cita le llega el aviso de demora"
     );
+  }
+
+  paso("operario: solo ve y acciona sus agendas");
+  const equipo = await api("GET", "/api/settings/team");
+  const yo = equipo.body?.members?.find((m) => m.email === process.env.E2E_EMAIL);
+  if (yo?.role !== "owner") {
+    console.log("  · la cuenta del arnés no es propietaria: se salta este paso");
+  } else {
+    const opEmail = `op${corrida}@vocero.test`;
+    const opPass = `Op-${corrida}-${Math.random().toString(36).slice(2)}`;
+    const alta = await api("POST", "/api/settings/team", {
+      name: "E2E Operario",
+      email: opEmail,
+      password: opPass,
+      role: "operator",
+      agendaIds: [agenda.id],
+    });
+    ok(alta.status === 201, `cuenta de operario creada (${alta.status})`);
+    const opLogin = await fetch(`${BASE}/api/auth/sign-in/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: BASE },
+      body: JSON.stringify({ email: opEmail, password: opPass }),
+    });
+    const opCookie = opLogin.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+    const op = async (method, path, body) => {
+      const res = await fetch(`${BASE}${path}`, {
+        method,
+        redirect: "manual",
+        headers: { cookie: opCookie, origin: BASE, ...(body ? { "content-type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      return { status: res.status, location: res.headers.get("location"), body: await res.json().catch(() => null) };
+    };
+    const suyo = await op("GET", "/api/turnos/board");
+    ok(
+      suyo.status === 200 && suyo.body.agendas.length === 1 && suyo.body.agendas[0].id === agenda.id,
+      `el tablero del operario trae solo su agenda (${suyo.body?.agendas?.map((a) => a.numberPrefix)})`
+    );
+    ok((await op("GET", "/api/conversations")).status === 403, "la Bandeja le responde 403");
+    const pagina = await op("GET", "/inbox");
+    ok(pagina.status === 307 && pagina.location?.endsWith("/turnos"), `la página /inbox lo manda a /turnos (${pagina.status})`);
+    const semanaOp = await op("GET", "/api/turnos/reservas");
+    ok(semanaOp.body?.agendas?.every((a) => a.id === agenda.id), "su «Agenda» trae solo su agenda");
+    ok(
+      (await op("POST", "/api/turnos/turns", { agendaId: agendaCitas.id, displayName: "Ajeno" })).status === 403,
+      "no suma gente a una agenda ajena"
+    );
+    const ajeno = await api("POST", "/api/turnos/turns", { agendaId: agendaCitas.id, displayName: "Ajeno" });
+    const llamarAjeno = await op("POST", `/api/turnos/turns/${ajeno.body?.id}`, { expected: "waiting", to: "called" });
+    ok(llamarAjeno.status === 409, "no llama un turno de una agenda ajena");
+    ok(
+      (await tablero(agendaCitas.id)).turns.find((t) => t.id === ajeno.body?.id)?.status === "waiting",
+      "el turno ajeno sigue esperando"
+    );
+    const propio = await api("POST", "/api/turnos/turns", { agendaId: agenda.id, displayName: "Propio" });
+    const llamar = await op("POST", `/api/turnos/turns/${propio.body?.id}`, { expected: "waiting", to: "called" });
+    ok(llamar.status === 200, "llama a un turno de su agenda");
+    const opId = (await api("GET", "/api/settings/team")).body?.members?.find((m) => m.email === opEmail)?.id;
+    await api("PATCH", `/api/settings/team/${opId}`, { role: "member", agendaIds: [] });
   }
 } catch (err) {
   console.error("FALLÓ:", err);

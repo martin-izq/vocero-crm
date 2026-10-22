@@ -57,6 +57,16 @@ número compartido del PLAN-MVP del POC quedan afuera.
 9. **Citas del día**: con `AGENDA=on`, las citas de hoy entran como turnos con
    horario a la agenda marcada «recibe las citas». Atendido marca la cita
    `realizada`; ausente, `no_show`; una cita cancelada saca su turno de la fila.
+10. **Agenda de la semana**: la pestaña «Agenda» de Turnos muestra los turnos
+    con horario de siete días (`GET /api/turnos/reservas?desde=`), con un color
+    por agenda y un filtro. Desde ahí se cancela un turno que sigue en espera.
+11. **Operario** (rol `operator`, el médico): el propietario lo crea o lo
+    cambia en Ajustes → Equipo y elige sus agendas (`agenda_operator`).
+    - Ve solo Turnos, y dentro solo sus agendas: «Hoy» y «Agenda».
+    - Llama al siguiente, comienza, termina, marca ausente, suma gente y
+      cierra el día en sus agendas.
+    - No ve la Bandeja, los contactos ni Ajustes.
+    - Por el SSE solo le llega `turno.changed`.
 
 ## Decisiones
 
@@ -70,6 +80,15 @@ número compartido del PLAN-MVP del POC quedan afuera.
   automático no salda lo que el paciente escribió (025).
 - Las citas se traen al leer (tablero, bot, avisador), no con un reloj
   (`ponytail` en `traerCitasDeHoy`).
+- Vocabulario, decidido el 2026-10-22: para el paciente siempre es «turno»,
+  con horario o por orden de llegada. «Cita» queda solo para las que vienen
+  de la agenda de Citas de Vocero (`AGENDA`). Una instalación que usa Turnos
+  apaga `AGENDA`: las dos agendas a la vez confunden.
+- El encierro del operario vive en `requireSession`: `src/middleware.ts` pone
+  la ruta pedida en `x-vocero-path`, y fuera de `operarioPuede` la API
+  responde 403 y las páginas mandan a `/turnos`. Sin la cabecera se niega.
+  Un solo chequeo cubre también la navegación del cliente, donde los layouts
+  no se vuelven a dibujar.
 - Hito 0, prerequisito de dar cuentas a recepción:
   - `withConfigAuth` en todas las rutas de configuración, con un guardarraíl
     (`tests/unit/config-rbac-guard.test.ts`);
@@ -86,7 +105,6 @@ número compartido del PLAN-MVP del POC quedan afuera.
 ## Fuera de alcance (por ahora)
 
 - QR de llegada y estado «en el lugar».
-- Pantalla del profesional.
 - Recordatorio del día anterior con plantilla (hito 6).
 - Anti-bots.
 - Varios negocios por instalación.

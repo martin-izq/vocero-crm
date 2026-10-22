@@ -12,6 +12,7 @@ import { enabledChannels } from "@/server/channels/enabled";
 import { navKicker } from "@/lib/channels";
 import { avisoIaDe } from "@/server/ai/aviso";
 import { AvisoIaBanner } from "@/components/avisos/aviso-ia";
+import { esOperario } from "@/lib/auth/roles";
 
 export default async function AppLayout({
   children,
@@ -28,7 +29,8 @@ export default async function AppLayout({
   // El agente encendido y sin con qué pensar se ve desde fuera igual que un
   // bot roto. Se resuelve en el servidor y en el layout para que se vea desde
   // CUALQUIER pantalla, no solo desde el panel de un contacto (#85).
-  const aviso = await avisoIaDe(session.organizationId);
+  // El operario no configura nada: el aviso no es para él.
+  const aviso = esOperario(session.role) ? null : await avisoIaDe(session.organizationId);
 
   return (
     <AppShell

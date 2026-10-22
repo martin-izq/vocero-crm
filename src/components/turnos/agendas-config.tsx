@@ -41,7 +41,7 @@ const MODOS = {
   none: "Solo con reserva (horario)",
 } as const;
 
-export function AgendasConfig({ onSaved }: { onSaved: () => void }) {
+export function AgendasConfig({ citas = false, onSaved }: { citas?: boolean; onSaved: () => void }) {
   const [agendas, setAgendas] = useState<AgendaForm[]>([]);
   const [form, setForm] = useState<AgendaForm>(VACIA);
   const [error, setError] = useState<string | null>(null);
@@ -124,10 +124,13 @@ export function AgendasConfig({ onSaved }: { onSaved: () => void }) {
         </Campo>
       </div>
       <div className="flex flex-wrap items-center gap-4 text-sm">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={form.receivesBookings} onChange={(e) => set("receivesBookings", e.target.checked)} />
-          Recibe las citas del día
-        </label>
+        {/* Solo con la agenda de Citas de Vocero encendida (`AGENDA`). */}
+        {citas && (
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={form.receivesBookings} onChange={(e) => set("receivesBookings", e.target.checked)} />
+            Recibe las citas del día
+          </label>
+        )}
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={form.active} onChange={(e) => set("active", e.target.checked)} />
           Activa

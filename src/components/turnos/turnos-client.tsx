@@ -11,6 +11,7 @@ import { duracion, horaLocal } from "@/lib/turnos/format";
 import type { MainAction } from "@/lib/turnos/reception";
 import type { TurnStatus } from "@/lib/turnos/transitions";
 import type { VistaTablero } from "@/server/turnos/service";
+import { AgendaSemana } from "./agenda-semana";
 import { AgendasConfig } from "./agendas-config";
 
 /**
@@ -30,7 +31,15 @@ const ESTADO: Record<TurnStatus, { label: string; variant: "default" | "secondar
   absent: { label: "Ausente", variant: "outline" },
 };
 
-export function TurnosClient({ puedeConfigurar }: { puedeConfigurar: boolean }) {
+export function TurnosClient({
+  puedeConfigurar,
+  citas = false,
+}: {
+  puedeConfigurar: boolean;
+  /** ¿Está la agenda de Citas de Vocero? Sin ella, «Recibe las citas» no aplica. */
+  citas?: boolean;
+}) {
+  const [vista, setVista] = useState<"hoy" | "agenda">("hoy");
   const [data, setData] = useState<VistaTablero | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [config, setConfig] = useState(false);
@@ -78,9 +87,23 @@ export function TurnosClient({ puedeConfigurar }: { puedeConfigurar: boolean }) 
   return (
     <div className="flex h-full flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-[17px] font-bold tracking-tight">Turnos de hoy</h2>
-          {data && <span className="text-sm text-muted-foreground">{data.day}</span>}
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-[17px] font-bold tracking-tight">Turnos</h2>
+          <div role="tablist" className="flex rounded-md border p-0.5 text-sm">
+            {(["hoy", "agenda"] as const).map((v) => (
+              <button
+                key={v}
+                role="tab"
+                type="button"
+                aria-selected={vista === v}
+                onClick={() => setVista(v)}
+                className={`rounded px-3 py-1 ${vista === v ? "bg-muted font-semibold" : "text-muted-foreground"}`}
+              >
+                {v === "hoy" ? "Hoy" : "Agenda"}
+              </button>
+            ))}
+          </div>
+          {data && vista === "hoy" && <span className="text-sm text-muted-foreground">{data.day}</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <a href="/sala" target="_blank" rel="noreferrer">
@@ -104,15 +127,16 @@ export function TurnosClient({ puedeConfigurar }: { puedeConfigurar: boolean }) 
             {aviso}
           </p>
         )}
-        {config && puedeConfigurar && <AgendasConfig onSaved={() => void refetch()} />}
-        {data && data.agendas.length === 0 && (
+        {config && puedeConfigurar && <AgendasConfig citas={citas} onSaved={() => void refetch()} />}
+        {vista === "agenda" && <AgendaSemana />}
+        {vista === "hoy" && data && data.agendas.length === 0 && (
           <p className="text-sm text-muted-foreground">
             Todavía no hay agendas.{" "}
-            {puedeConfigurar ? "Creá la primera desde «Agendas»." : "Pedile al dueño que cree una."}
+            {puedeConfigurar ? "Creá la primera desde «Agendas»." : "Pedile al dueño que cree una o que te asigne la tuya."}
           </p>
         )}
         <div className="grid gap-4 xl:grid-cols-2">
-          {data?.agendas.map((a) => (
+          {vista === "hoy" && data?.agendas.map((a) => (
             <AgendaCard
               key={a.id}
               agenda={a}
@@ -221,7 +245,9 @@ function Fila({
           {t.whatsapp && <span className="text-xs text-muted-foreground">WhatsApp</span>}
         </div>
         <p className="text-xs text-muted-foreground">
-          {t.scheduledAt ? `Cita ${horaLocal(new Date(t.scheduledAt), timezone)}` : "Sin cita"}
+          {t.scheduledAt
+            ? `${t.source === "booking" ? "Cita" : "Turno"} ${horaLocal(new Date(t.scheduledAt), timezone)}`
+            : "Por orden de llegada"}
           {t.status === "waiting" && t.estimatedAt
             ? ` · ≈ ${horaLocal(new Date(t.estimatedAt), timezone)} · ${t.peopleBefore} antes`
             : ""}

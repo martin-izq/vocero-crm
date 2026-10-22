@@ -1,7 +1,7 @@
 import { apiError, parseBody, withAuth } from "@/lib/api";
 import { turnosDisabledResponse, turnosEnabled } from "@/server/turnos/flag";
 import { transicionSchema } from "@/server/turnos/http";
-import { transicionar } from "@/server/turnos/service";
+import { alcanceDe, transicionar } from "@/server/turnos/service";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +21,7 @@ export const POST = withAuth(async (session, req: Request, ctx: { params: Promis
     to: body.data.to,
     actor: "reception",
     userId: session.userId,
+    alcance: await alcanceDe(session),
   });
   if (!r.ok) return apiError(409, "stale", r.message);
   return Response.json({ ok: true });
