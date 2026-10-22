@@ -439,9 +439,14 @@ try {
   await browser.close();
   await api("POST", `/api/turnos/agendas/${agenda.id}/close`);
   await api("POST", `/api/turnos/agendas/${agendaCitas.id}/close`);
-  await api("PATCH", `/api/turnos/agendas/${agendaCitas.id}`, { ...CITAS, receivesBookings: false, active: false });
-  await api("PATCH", `/api/turnos/agendas/${agenda.id}`, { ...AGENDA, active: false });
-  await api("PATCH", `/api/turnos/agendas/${agendaReservas.id}`, { ...RESERVAS, active: false });
+  await api("POST", `/api/turnos/agendas/${agendaReservas.id}/close`);
+  // Las agendas de la prueba no quedan en la instancia; si algo quedó
+  // pendiente (409), al menos quedan apagadas.
+  for (const [id, def] of [[agendaCitas.id, CITAS], [agenda.id, AGENDA], [agendaReservas.id, RESERVAS]]) {
+    if ((await api("DELETE", `/api/turnos/agendas/${id}`)).status !== 204) {
+      await api("PATCH", `/api/turnos/agendas/${id}`, { ...def, receivesBookings: false, active: false });
+    }
+  }
   if (recibiaCitas) {
     const { id, organizationId: _o, createdAt: _c, updatedAt: _u, ...resto } = recibiaCitas;
     await api("PATCH", `/api/turnos/agendas/${id}`, { ...resto, receivesBookings: true });

@@ -153,7 +153,7 @@ export function AgendasConfig({ citas = false, onSaved }: { citas?: boolean; onS
           {form.id ? "Guardar agenda" : "Crear agenda"}
         </Button>
         {form.id && (
-          <Button size="sm" variant="ghost" className="text-danger-text" onClick={() => void borrar()}>
+          <Button size="sm" variant="outline" className="ml-auto border-danger-text text-danger-text" onClick={() => void borrar()}>
             Eliminar agenda
           </Button>
         )}
